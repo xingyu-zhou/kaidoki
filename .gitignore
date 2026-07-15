@@ -12,6 +12,12 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
+# ---- Test / coverage artifacts ----
+htmlcov/
+coverage.xml
+.coverage
+.coverage.*
+
 # ---- Virtualenvs ----
 venv/
 .venv/

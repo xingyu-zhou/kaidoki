@@ -467,13 +467,20 @@ def test(query):
                 if recommendation_result.recommendations:
                     click.echo(f"✅ 推荐引擎测试成功，生成了 {len(recommendation_result.recommendations)} 个推荐")
                     
-                    # 显示前3个推荐
+                    # 显示前3个推荐（recommendations 是 List[ProductEntity]）
                     click.echo("\n🏆 推荐结果 (前3个):")
-                    for i, rec in enumerate(recommendation_result.recommendations[:3], 1):
-                        click.echo(f"{i}. {rec.product.title}")
-                        click.echo(f"   💰 价格: ¥{rec.product.price:,}" if rec.product.price else "   💰 价格: 未知")
-                        click.echo(f"   ⭐ 评分: {rec.score:.2f}")
-                        click.echo(f"   🔗 置信度: {rec.confidence:.2f}")
+                    for i, product in enumerate(recommendation_result.recommendations[:3], 1):
+                        click.echo(f"{i}. {product.title}")
+                        click.echo(f"   💰 价格: {product.formatted_price}")
+                        if product.condition:
+                            click.echo(f"   📦 状态: {product.condition}")
+                        if product.seller_name:
+                            click.echo(f"   🏪 卖家: {product.seller_name}")
+
+                    # 显示推荐策略与理由（若有）
+                    click.echo(f"\n📌 使用策略: {recommendation_result.strategy_used}")
+                    if recommendation_result.reasoning:
+                        click.echo(f"💡 推荐理由: {recommendation_result.reasoning}")
                 else:
                     click.echo("❌ 推荐引擎测试失败：没有生成推荐结果")
             else:

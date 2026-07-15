@@ -36,32 +36,41 @@ class QueryParserService:
         # 🔧 关键修复：集成LLM服务进行智能解析
         try:
             # 构建LLM提示词进行查询解析
-            llm_prompt = f"""
-请分析以下日语购物查询，提取关键信息：
+            llm_prompt = f"""请分析以下购物查询，提取结构化信息，返回 JSON。
 查询: {query_text}
 
-请返回JSON格式，包含以下字段：
-- keywords: 产品关键词列表（排除价格条件词）
-- category: 产品类别
-- brand: 品牌（如果有）
-- price_min: 最低价格（日元）
-- price_max: 最高价格（日元）
-- intent: 购买意图（SEARCH/PURCHASE/COMPARE）
-- condition: 商品状态（新品/中古）
+字段：
+- keywords: 用于在 Mercari 搜索的**简洁产品关键词**数组（产品名/型号/品牌/规格），通常 2~5 个词。
+  **只放产品词**：不要放价格/预算/成色，也不要放 "探して/おすすめ/安い/コスパ/以内" 这类意图或修饰词，
+  更不要放助词或整句片段。日文或通用名皆可。
+- category: 产品类别（可空）
+- brand: 品牌（可空）
+- price_min / price_max: 价格（日元，整数或 null）
+- intent: SEARCH / PURCHASE / COMPARE
+- condition: 成色（可空）
 
-示例查询: "iPhone 15 Pro Max 1TB 10万円以下"
-示例响应: {{"keywords": ["iPhone", "15", "Pro", "Max", "1TB"], "category": "スマートフォン", "brand": "Apple", "price_min": null, "price_max": 100000, "intent": "SEARCH", "condition": null}}
+示例1 查询: "iPhone 15 Pro Max 1TB 10万円以下"
+示例1 响应: {{"keywords": ["iPhone", "15", "Pro", "Max", "1TB"], "category": "スマートフォン", "brand": "Apple", "price_min": null, "price_max": 100000, "intent": "SEARCH", "condition": null}}
+示例2 查询: "AirPods Pro を1万円以内で探して、コスパのいいもの"
+示例2 响应: {{"keywords": ["AirPods", "Pro"], "category": null, "brand": "Apple", "price_min": null, "price_max": 10000, "intent": "SEARCH", "condition": null}}
 """
             
             # 调用LLM服务进行智能解析
             logger.info(f"使用LLM服务解析查询: {query_text}")
-            llm_response = await self.llm_service.generate_response(llm_prompt)
+            llm_response = await self.llm_service.generate_response(llm_prompt, response_format="json")
             logger.info(f"LLM解析响应: {llm_response.content[:200]}...")
-            
-            # 解析LLM响应（简单实现，实际可能需要更复杂的JSON解析）
+
+            # 解析LLM响应（JSON 模式；仍防御性剥掉可能的 ```json 围栏）
             import json
             try:
-                parsed_data = json.loads(llm_response.content)
+                content = (llm_response.content or "").strip()
+                if content.startswith("```"):
+                    parts = content.split("```")
+                    if len(parts) > 1:
+                        content = parts[1]
+                    if content.lstrip().lower().startswith("json"):
+                        content = content.lstrip()[4:]
+                parsed_data = json.loads(content)
                 keywords = parsed_data.get('keywords', [])
                 category = parsed_data.get('category')
                 brand = parsed_data.get('brand')
@@ -87,6 +96,10 @@ class QueryParserService:
         except (KeyError, AttributeError):
             intent = QueryIntent.SEARCH
         
+        # 清洗关键词：去掉误混入的价格/成色/意图短语与整句片段，只留简洁产品词
+        cleaned_kw = self._clean_keywords(keywords)
+        keywords = cleaned_kw or keywords
+
         # 创建查询实体
         query_entity = QueryEntity(
             original_query=query_text,
@@ -184,7 +197,25 @@ class QueryParserService:
             condition = "中古"
         
         return keywords, price_min, price_max, category, brand, condition
-    
+
+    def _clean_keywords(self, keywords) -> list:
+        """过滤误混入关键词的价格/成色/意图短语与整句片段，只留简洁产品词。
+
+        安全网：无论 LLM 是否遵守提示词，都保证送去搜索的是干净关键词。
+        """
+        cleaned = []
+        for kw in keywords or []:
+            if not isinstance(kw, str):
+                continue
+            w = kw.strip()
+            if not w or self._is_price_condition(w):
+                continue
+            # 整句片段特征：含读点/助词/价格字，或过长（正常产品关键词都很短）
+            if any(ch in w for ch in ("、", "。", "，", "を", "円")) or len(w) > 14:
+                continue
+            cleaned.append(w)
+        return cleaned
+
     def _is_price_condition(self, word: str) -> bool:
         """判断是否为价格条件词"""
         price_patterns = [

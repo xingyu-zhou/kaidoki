@@ -275,8 +275,12 @@ def agent(query, max_iterations):
         try:
             await cli_app.initialize()
 
-            # 用真实 ScraperService 后端构建工具注册表
-            registry = build_mercari_tool_registry(cli_app.scraper_service)
+            # 用真实服务后端构建工具注册表（含把整条固定流程包起来的 recommend_deals 高层工具）
+            registry = build_mercari_tool_registry(
+                cli_app.scraper_service,
+                cli_app.query_parser,
+                cli_app.recommendation_service,
+            )
             agent_service = AgentService(
                 cli_app.llm_service, registry, max_iterations=max_iterations
             )

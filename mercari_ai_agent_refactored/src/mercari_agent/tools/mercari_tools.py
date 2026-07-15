@@ -220,11 +220,103 @@ class PriceStatisticsTool(BaseTool):
         )
 
 
-def build_mercari_tool_registry(scraper_service: ScraperService):
-    """创建并注册 Mercari 工具，返回 ToolRegistry。"""
+class RecommendMercariTool(BaseTool):
+    """把整条固定流程(解析→抓取→LLM 重排)包成一个高层工具,一步给出成品推荐。"""
+
+    def __init__(self, scraper_service: ScraperService, query_parser, recommendation_service):
+        super().__init__(
+            name="recommend_deals",
+            description=(
+                "运行完整的推荐流程:理解自然语言查询 → 抓取 Mercari 在售商品 → "
+                "LLM 按策略重排,一步返回一份现成的高性价比推荐(含推荐理由)。"
+                "适合直接、明确的'帮我找 X 的好货/性价比高的 X'类请求。"
+                "若需要比较多个商品、先查价格行情再判断、或多步精细控制,"
+                "请改用 search_mercari + get_price_statistics 组合。"
+            ),
+        )
+        self.scraper = scraper_service
+        self.query_parser = query_parser
+        self.recommendation = recommendation_service
+
+    @property
+    def schema(self) -> Dict[str, Any]:
+        return {
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "自然语言购物需求,如 'iPhone 15 128GB 8万円以下'、'性价比高的二手 AirPods Pro'。",
+                    },
+                    "strategy": {
+                        "type": "string",
+                        "enum": ["price_oriented", "quality_oriented", "balanced", "trending"],
+                        "description": "推荐策略,可选,默认 balanced。price_oriented=偏低价,quality_oriented=偏成色。",
+                    },
+                    "max_results": {
+                        "type": "integer",
+                        "description": "返回推荐数量,默认 8,建议 5~12。",
+                    },
+                },
+                "required": ["query"],
+            }
+        }
+
+    async def execute(
+        self,
+        query: str,
+        strategy: str = "balanced",
+        max_results: int = 8,
+        **kwargs,  # 吸收模型可能给出的多余/幻觉参数
+    ) -> ToolResult:
+        max_results = max(1, min(int(max_results or 8), 20))
+        parsed = await self.query_parser.parse(query)
+        q = parsed.query
+        scraping = await self.scraper.scrape(q, max_products=max_results * 2)
+        if not scraping.products:
+            return ToolResult(
+                status=ToolStatus.SUCCESS,
+                data={"query": query, "count": 0, "note": "未抓到符合条件的在售商品"},
+            )
+        rec = await self.recommendation.recommend(scraping.products, q, max_results, strategy)
+        return ToolResult(
+            status=ToolStatus.SUCCESS,
+            data={
+                "query": query,
+                "understood": {
+                    "keywords": list(getattr(q, "keywords", None) or []),
+                    "price_min": getattr(q, "price_min", None),
+                    "price_max": getattr(q, "price_max", None),
+                    "condition": getattr(q, "condition", None),
+                    "category": getattr(q, "category", None),
+                },
+                "strategy": rec.strategy_used,
+                "reasoning": getattr(rec, "reasoning", None),
+                "count": len(rec.recommendations),
+                "products": [_compact_product(p) for p in rec.recommendations],
+            },
+        )
+
+
+def build_mercari_tool_registry(
+    scraper_service: ScraperService,
+    query_parser=None,
+    recommendation_service=None,
+):
+    """创建并注册 Mercari 工具，返回 ToolRegistry。
+
+    低层工具(search_mercari / get_price_statistics)总是注册；
+    仅当同时传入 query_parser 与 recommendation_service 时，才注册把整条固定流程
+    包起来的高层工具 recommend_deals。
+    """
     from .framework.tool_registry import ToolRegistry
 
     registry = ToolRegistry()
     registry.register(SearchMercariTool(scraper_service), category="mercari")
     registry.register(PriceStatisticsTool(scraper_service), category="mercari")
+    if query_parser is not None and recommendation_service is not None:
+        registry.register(
+            RecommendMercariTool(scraper_service, query_parser, recommendation_service),
+            category="mercari",
+        )
     return registry

@@ -280,6 +280,7 @@ def agent(query, max_iterations):
                 cli_app.scraper_service,
                 cli_app.query_parser,
                 cli_app.recommendation_service,
+                include_model_compare=True,
             )
             agent_service = AgentService(
                 cli_app.llm_service, registry, max_iterations=max_iterations

@@ -302,12 +302,17 @@ def build_mercari_tool_registry(
     scraper_service: ScraperService,
     query_parser=None,
     recommendation_service=None,
+    include_model_compare: bool = False,
+    model_compare_backends=None,
 ):
     """创建并注册 Mercari 工具，返回 ToolRegistry。
 
     低层工具(search_mercari / get_price_statistics)总是注册；
     仅当同时传入 query_parser 与 recommendation_service 时，才注册把整条固定流程
     包起来的高层工具 recommend_deals。
+    仅当 include_model_compare=True 时，注册新品/新型号对比工具
+    get_new_and_newer_models(默认后端:kakaku 优先 + 品牌官方商店兜底,
+    复用 scraper_service 的浏览器;也可用 model_compare_backends 注入自定义后端)。
     """
     from .framework.tool_registry import ToolRegistry
 
@@ -319,4 +324,9 @@ def build_mercari_tool_registry(
             RecommendMercariTool(scraper_service, query_parser, recommendation_service),
             category="mercari",
         )
+    if include_model_compare:
+        from .model_compare import GetNewAndNewerModelsTool, build_default_backends
+
+        backends = model_compare_backends or build_default_backends(scraper_service)
+        registry.register(GetNewAndNewerModelsTool(backends), category="mercari")
     return registry

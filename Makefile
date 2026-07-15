@@ -1,11 +1,11 @@
-# Mercari AI Agent - 重构版 Makefile
+# Kaidoki - 重构版 Makefile
 # 提供项目管理和开发任务的便捷命令
 
 .PHONY: help install install-dev clean test test-unit test-integration test-e2e lint format type-check security-check build run run-api docker-build docker-run docker-compose-up docker-compose-down docs docs-serve backup restore deploy validate-env setup-dev
 
 # 默认目标
 help: ## 显示帮助信息
-	@echo "Mercari AI Agent - 重构版"
+	@echo "Kaidoki - 重构版"
 	@echo "=========================="
 	@echo ""
 	@echo "可用命令:"
@@ -91,7 +91,7 @@ test-e2e: ## 运行端到端测试
 
 test-coverage: ## 运行测试并生成覆盖率报告
 	@echo "🧪 运行测试覆盖率..."
-	pytest --cov=src/mercari_agent --cov-report=html --cov-report=term
+	pytest --cov=src/kaidoki --cov-report=html --cov-report=term
 
 test-watch: ## 监视文件变化并自动运行测试
 	@echo "👀 监视测试..."
@@ -107,11 +107,11 @@ build: ## 构建项目
 
 run: validate-env ## 运行主程序
 	@echo "🚀 运行主程序..."
-	uv run mercari-agent
+	uv run kaidoki
 
 run-api: validate-env ## 运行API服务器
 	@echo "🚀 运行API服务器..."
-	uv run mercari-api
+	uv run kaidoki-api
 
 # =============================================================================
 # Docker
@@ -119,11 +119,11 @@ run-api: validate-env ## 运行API服务器
 
 docker-build: ## 构建Docker镜像
 	@echo "🐳 构建Docker镜像..."
-	docker build -t mercari-ai-agent:latest .
+	docker build -t kaidoki:latest .
 
 docker-run: ## 运行Docker容器
 	@echo "🐳 运行Docker容器..."
-	docker run -p 8000:8000 --env-file .env mercari-ai-agent:latest
+	docker run -p 8000:8000 --env-file .env kaidoki:latest
 
 docker-compose-up: ## 启动Docker Compose服务
 	@echo "🐳 启动Docker Compose服务..."
@@ -159,7 +159,7 @@ docs-clean: ## 清理文档
 
 db-init: ## 初始化数据库
 	@echo "🗄️ 初始化数据库..."
-	python -m src.mercari_agent.infrastructure.database.init
+	python -m src.kaidoki.infrastructure.database.init
 
 db-migrate: ## 运行数据库迁移
 	@echo "🗄️ 运行数据库迁移..."
@@ -175,7 +175,7 @@ db-reset: ## 重置数据库
 	@echo "⚠️ 这将删除所有数据！"
 	@read -p "确认重置数据库? (y/N): " confirm; \
 	if [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ]; then \
-		python -m src.mercari_agent.infrastructure.database.reset; \
+		python -m src.kaidoki.infrastructure.database.reset; \
 	fi
 
 # =============================================================================
@@ -200,12 +200,12 @@ deploy-production: ## 部署到生产环境
 
 backup: ## 备份数据
 	@echo "💾 备份数据..."
-	python -m src.mercari_agent.scripts.backup
+	python -m src.kaidoki.scripts.backup
 
 restore: ## 恢复数据
 	@echo "📥 恢复数据..."
 	@read -p "备份文件路径: " backup_file; \
-	python -m src.mercari_agent.scripts.restore "$$backup_file"
+	python -m src.kaidoki.scripts.restore "$$backup_file"
 
 # =============================================================================
 # 监控和日志
@@ -213,7 +213,7 @@ restore: ## 恢复数据
 
 logs: ## 查看日志
 	@echo "📋 查看日志..."
-	tail -f data/logs/mercari_agent.log
+	tail -f data/logs/kaidoki.log
 
 logs-error: ## 查看错误日志
 	@echo "📋 查看错误日志..."
@@ -221,7 +221,7 @@ logs-error: ## 查看错误日志
 
 monitor: ## 启动监控
 	@echo "📊 启动监控..."
-	python -m src.mercari_agent.monitoring.dashboard
+	python -m src.kaidoki.monitoring.dashboard
 
 # =============================================================================
 # 开发工具
@@ -229,7 +229,7 @@ monitor: ## 启动监控
 
 shell: ## 启动Python shell
 	@echo "🐍 启动Python shell..."
-	python -c "from src.mercari_agent import *; print('Mercari AI Agent shell ready!')"
+	python -c "from src.kaidoki import *; print('Kaidoki shell ready!')"
 
 jupyter: ## 启动Jupyter notebook
 	@echo "📓 启动Jupyter notebook..."
@@ -237,12 +237,12 @@ jupyter: ## 启动Jupyter notebook
 
 profile: ## 性能分析
 	@echo "⚡ 性能分析..."
-	python -m cProfile -o profile.stats -m src.mercari_agent.main
+	python -m cProfile -o profile.stats -m src.kaidoki.main
 	python -c "import pstats; p = pstats.Stats('profile.stats'); p.sort_stats('cumulative').print_stats(20)"
 
 benchmark: ## 运行基准测试
 	@echo "⚡ 运行基准测试..."
-	python -m src.mercari_agent.benchmarks.runner
+	python -m src.kaidoki.benchmarks.runner
 
 # =============================================================================
 # 插件管理
@@ -250,17 +250,17 @@ benchmark: ## 运行基准测试
 
 plugin-list: ## 列出已安装的插件
 	@echo "🔌 列出插件..."
-	python -m src.mercari_agent.plugins.cli list
+	python -m src.kaidoki.plugins.cli list
 
 plugin-install: ## 安装插件
 	@echo "🔌 安装插件..."
 	@read -p "插件名称或路径: " plugin; \
-	python -m src.mercari_agent.plugins.cli install "$$plugin"
+	python -m src.kaidoki.plugins.cli install "$$plugin"
 
 plugin-uninstall: ## 卸载插件
 	@echo "🔌 卸载插件..."
 	@read -p "插件名称: " plugin; \
-	python -m src.mercari_agent.plugins.cli uninstall "$$plugin"
+	python -m src.kaidoki.plugins.cli uninstall "$$plugin"
 
 # =============================================================================
 # 工具
@@ -268,12 +268,12 @@ plugin-uninstall: ## 卸载插件
 
 tool-list: ## 列出可用工具
 	@echo "🛠️ 列出工具..."
-	python -m src.mercari_agent.tools.cli list
+	python -m src.kaidoki.tools.cli list
 
 tool-test: ## 测试工具
 	@echo "🛠️ 测试工具..."
 	@read -p "工具名称: " tool; \
-	python -m src.mercari_agent.tools.cli test "$$tool"
+	python -m src.kaidoki.tools.cli test "$$tool"
 
 # =============================================================================
 # 配置管理
@@ -281,11 +281,11 @@ tool-test: ## 测试工具
 
 config-validate: ## 验证配置
 	@echo "⚙️ 验证配置..."
-	python -m src.mercari_agent.config.validator
+	python -m src.kaidoki.config.validator
 
 config-generate: ## 生成配置模板
 	@echo "⚙️ 生成配置模板..."
-	python -m src.mercari_agent.config.generator
+	python -m src.kaidoki.config.generator
 
 # =============================================================================
 # 版本管理
@@ -293,12 +293,12 @@ config-generate: ## 生成配置模板
 
 version: ## 显示版本信息
 	@echo "📋 版本信息..."
-	python -c "from src.mercari_agent import get_version_info; import json; print(json.dumps(get_version_info(), indent=2))"
+	python -c "from src.kaidoki import get_version_info; import json; print(json.dumps(get_version_info(), indent=2))"
 
 release: ## 创建发布版本
 	@echo "🏷️ 创建发布版本..."
 	@read -p "版本号 (例如: 2.1.0): " version; \
-	python -m src.mercari_agent.scripts.release "$$version"
+	python -m src.kaidoki.scripts.release "$$version"
 
 # =============================================================================
 # 全面检查
@@ -315,7 +315,7 @@ ci: check-all ## CI/CD 流水线
 # =============================================================================
 
 quickstart: ## 快速开始（首次使用）
-	@echo "🚀 Mercari AI Agent 快速开始..."
+	@echo "🚀 Kaidoki 快速开始..."
 	@echo "1. 设置开发环境..."
 	make setup-dev
 	@echo "2. 请激活虚拟环境后运行: make install-dev"
@@ -331,7 +331,7 @@ quickstart: ## 快速开始（首次使用）
 info: ## 显示项目信息
 	@echo "📋 项目信息"
 	@echo "============"
-	@echo "项目名称: Mercari AI Agent - 重构版"
+	@echo "项目名称: Kaidoki - 重构版"
 	@echo "版本: 2.0.0"
 	@echo "Python版本: $(shell python --version)"
 	@echo "项目路径: $(shell pwd)"

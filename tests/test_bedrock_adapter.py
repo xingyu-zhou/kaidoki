@@ -36,7 +36,7 @@ SRC = Path(__file__).resolve().parent.parent / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from mercari_agent.infrastructure.llm.llm_service import BedrockClaudeLLM  # noqa: E402
+from kaidoki.infrastructure.llm.llm_service import BedrockClaudeLLM  # noqa: E402
 
 
 DEFAULT_MODEL = "us.anthropic.claude-sonnet-4-6"
@@ -371,7 +371,7 @@ async def test_close_is_defensive():
 # 6. 配置：默认值 + env 覆盖 + has_bedrock_config
 # --------------------------------------------------------------------------- #
 def test_bedrock_config_defaults():
-    from mercari_agent.shared.config.app_config import LLMConfig
+    from kaidoki.shared.config.app_config import LLMConfig
     c = LLMConfig()
     assert c.bedrock_model_id == DEFAULT_MODEL
     assert c.bedrock_region == "us-west-2"
@@ -380,7 +380,7 @@ def test_bedrock_config_defaults():
 
 
 def test_bedrock_model_id_env_override(monkeypatch):
-    from mercari_agent.shared.config.app_config import AppConfig
+    from kaidoki.shared.config.app_config import AppConfig
     monkeypatch.setenv("BEDROCK_MODEL_ID", "apac.anthropic.custom-model-v9:0")
     monkeypatch.setenv("BEDROCK_REGION", "ap-northeast-1")
     monkeypatch.setenv("AWS_PROFILE", "custom-profile")

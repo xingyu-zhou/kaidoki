@@ -2,7 +2,7 @@
   "environment": "development",
   "debug": true,
   "database": {
-    "sqlite_path": "./data/dev_mercari_agent.db"
+    "sqlite_path": "./data/dev_kaidoki.db"
   },
   "llm": {
     "max_tokens": 4000,

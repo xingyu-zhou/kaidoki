@@ -19,11 +19,11 @@ SRC = Path(__file__).resolve().parent.parent / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from mercari_agent.tools.model_compare import (  # noqa: E402
+from kaidoki.tools.model_compare import (  # noqa: E402
     GetNewAndNewerModelsTool,
     KakakuBackend,
 )
-from mercari_agent.tools.mercari_tools import build_mercari_tool_registry  # noqa: E402
+from kaidoki.tools.mercari_tools import build_mercari_tool_registry  # noqa: E402
 
 
 # --------------------------------------------------------------------------- #

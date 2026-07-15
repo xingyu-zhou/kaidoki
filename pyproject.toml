@@ -3,19 +3,14 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "mercari-ai-agent"
+name = "kaidoki"
 version = "2.0.0"
-description = "Mercari AI Agent - 重构版智能购物助手系统"
+description = "Kaidoki - 多数据源智能购物助手"
 readme = "README.md"
 license = "MIT"
-authors = [
-    {name = "Mercari AI Agent Team", email = "team@mercari-ai-agent.com"}
-]
-maintainers = [
-    {name = "Mercari AI Agent Team", email = "team@mercari-ai-agent.com"}
-]
+authors = [{name = "Kaidoki contributors"}]
 keywords = [
-    "ai", "agent", "mercari", "shopping", "llm", "scraping", "japanese", "nlp"
+    "ai", "agent", "kaidoki", "mercari", "shopping", "llm", "scraping", "japanese", "nlp"
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -64,14 +59,14 @@ Repository = "https://github.com/xingyu-zhou/kaidoki"
 Issues = "https://github.com/xingyu-zhou/kaidoki/issues"
 
 [project.scripts]
-mercari-agent = "mercari_agent.interfaces.cli.main:cli"
-mercari-api = "mercari_agent.interfaces.api.server:main"
+kaidoki = "kaidoki.interfaces.cli.main:cli"
+kaidoki-api = "kaidoki.interfaces.api.server:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-mercari_agent = ["py.typed", "*.yaml", "*.yml", "*.json"]
+kaidoki = ["py.typed", "*.yaml", "*.yml", "*.json"]
 
 # Black 配置
 [tool.black]
@@ -97,7 +92,7 @@ extend-exclude = '''
 profile = "black"
 multi_line_output = 3
 line_length = 88
-known_first_party = ["mercari_agent"]
+known_first_party = ["kaidoki"]
 known_third_party = ["fastapi", "pydantic", "sqlalchemy", "redis", "openai", "anthropic"]
 
 # MyPy 配置
@@ -136,7 +131,7 @@ addopts = [
     "-ra",
     "--strict-markers",
     "--strict-config",
-    "--cov=src/mercari_agent",
+    "--cov=src/kaidoki",
     "--cov-report=term-missing",
     "--cov-report=html",
     "--cov-report=xml",
@@ -210,4 +205,4 @@ ignore = [
 "tests/*" = ["B011"]
 
 [tool.ruff.isort]
-known-first-party = ["mercari_agent"]
+known-first-party = ["kaidoki"]

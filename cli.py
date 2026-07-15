@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Mercari AI Agent CLI 入口脚本
+Kaidoki CLI 入口脚本
 
 简化的CLI入口，用于快速访问主要功能。
 
@@ -10,7 +10,7 @@ Mercari AI Agent CLI 入口脚本
     python cli.py status
     python cli.py config
 
-Author: Mercari AI Agent Team (Refactored)
+Author: Kaidoki Team (Refactored)
 """
 
 import sys
@@ -23,7 +23,7 @@ sys.path.insert(0, str(project_root))
 
 # 导入CLI主模块
 try:
-    from src.mercari_agent.interfaces.cli.main import cli
+    from src.kaidoki.interfaces.cli.main import cli
     
     if __name__ == '__main__':
         cli()

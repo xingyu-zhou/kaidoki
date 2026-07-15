@@ -582,6 +582,68 @@ wheels = [
 ]
 
 [[package]]
+name = "kaidoki"
+version = "2.0.0"
+source = { editable = "." }
+dependencies = [
+    { name = "anthropic" },
+    { name = "boto3" },
+    { name = "click" },
+    { name = "fastapi" },
+    { name = "httpx" },
+    { name = "playwright" },
+    { name = "psutil" },
+    { name = "pydantic" },
+    { name = "starlette" },
+    { name = "uvicorn", extra = ["standard"] },
+]
+
+[package.optional-dependencies]
+openai = [
+    { name = "openai" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "black" },
+    { name = "build" },
+    { name = "flake8" },
+    { name = "isort" },
+    { name = "mypy" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "anthropic", specifier = ">=0.35.0,<1" },
+    { name = "boto3", specifier = ">=1.29.1,<2" },
+    { name = "click", specifier = ">=8.1.7,<9" },
+    { name = "fastapi", specifier = ">=0.104.1,<1" },
+    { name = "httpx", specifier = ">=0.25.2,<1" },
+    { name = "openai", marker = "extra == 'openai'", specifier = ">=1.52.2,<2" },
+    { name = "playwright", specifier = ">=1.40.0,<2" },
+    { name = "psutil", specifier = ">=5.9.6,<8" },
+    { name = "pydantic", specifier = ">=2.5.0,<3" },
+    { name = "starlette", specifier = ">=0.27.0,<1" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.24.0,<1" },
+]
+provides-extras = ["openai"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "black", specifier = ">=23.11.0,<26" },
+    { name = "build", specifier = ">=1.2.2,<2" },
+    { name = "flake8", specifier = ">=6.1.0,<8" },
+    { name = "isort", specifier = ">=5.12.0,<7" },
+    { name = "mypy", specifier = ">=1.7.1,<2" },
+    { name = "pytest", specifier = ">=7.4.0" },
+    { name = "pytest-asyncio", specifier = ">=0.21.0" },
+    { name = "pytest-cov", specifier = ">=4.1.0" },
+]
+
+[[package]]
 name = "librt"
 version = "0.13.0"
 source = { registry = "https://pypi.org/simple" }
@@ -663,68 +725,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/e7/ff/0ffefdcac38932a54d2b5eed4e0ba8a408f215002cd178ad1df0f2806ff8/mccabe-0.7.0.tar.gz", hash = "sha256:348e0240c33b60bbdf4e523192ef919f28cb2c3d7d5c7794f74009290f236325", size = 9658, upload_time = "2022-01-24T01:14:51.113Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/27/1a/1f68f9ba0c207934b35b86a8ca3aad8395a3d6dd7921c0686e23853ff5a9/mccabe-0.7.0-py2.py3-none-any.whl", hash = "sha256:6c2d30ab6be0e4a46919781807b4f0d834ebdd6c6e3dca0bda5a15f863427b6e", size = 7350, upload_time = "2022-01-24T01:14:49.62Z" },
-]
-
-[[package]]
-name = "mercari-ai-agent"
-version = "2.0.0"
-source = { editable = "." }
-dependencies = [
-    { name = "anthropic" },
-    { name = "boto3" },
-    { name = "click" },
-    { name = "fastapi" },
-    { name = "httpx" },
-    { name = "playwright" },
-    { name = "psutil" },
-    { name = "pydantic" },
-    { name = "starlette" },
-    { name = "uvicorn", extra = ["standard"] },
-]
-
-[package.optional-dependencies]
-openai = [
-    { name = "openai" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "black" },
-    { name = "build" },
-    { name = "flake8" },
-    { name = "isort" },
-    { name = "mypy" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-cov" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "anthropic", specifier = ">=0.35.0,<1" },
-    { name = "boto3", specifier = ">=1.29.1,<2" },
-    { name = "click", specifier = ">=8.1.7,<9" },
-    { name = "fastapi", specifier = ">=0.104.1,<1" },
-    { name = "httpx", specifier = ">=0.25.2,<1" },
-    { name = "openai", marker = "extra == 'openai'", specifier = ">=1.52.2,<2" },
-    { name = "playwright", specifier = ">=1.40.0,<2" },
-    { name = "psutil", specifier = ">=5.9.6,<8" },
-    { name = "pydantic", specifier = ">=2.5.0,<3" },
-    { name = "starlette", specifier = ">=0.27.0,<1" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.24.0,<1" },
-]
-provides-extras = ["openai"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "black", specifier = ">=23.11.0,<26" },
-    { name = "build", specifier = ">=1.2.2,<2" },
-    { name = "flake8", specifier = ">=6.1.0,<8" },
-    { name = "isort", specifier = ">=5.12.0,<7" },
-    { name = "mypy", specifier = ">=1.7.1,<2" },
-    { name = "pytest", specifier = ">=7.4.0" },
-    { name = "pytest-asyncio", specifier = ">=0.21.0" },
-    { name = "pytest-cov", specifier = ">=4.1.0" },
 ]
 
 [[package]]

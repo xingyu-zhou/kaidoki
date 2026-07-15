@@ -2,7 +2,7 @@
   "environment": "production",
   "debug": false,
   "database": {
-    "sqlite_path": "./data/prod_mercari_agent.db"
+    "sqlite_path": "./data/prod_kaidoki.db"
   },
   "llm": {
     "max_tokens": 4000,

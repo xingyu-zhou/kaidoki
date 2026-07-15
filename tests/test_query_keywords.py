@@ -12,7 +12,7 @@ SRC = Path(__file__).resolve().parent.parent / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from mercari_agent.application.services.query_parser_service import (  # noqa: E402
+from kaidoki.application.services.query_parser_service import (  # noqa: E402
     QueryParserService,
 )
 

@@ -34,17 +34,17 @@ SRC = Path(__file__).resolve().parent.parent / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from mercari_agent.application.services.agent_service import (  # noqa: E402
+from kaidoki.application.services.agent_service import (  # noqa: E402
     AgentService,
     AgentResult,
     TraceStep,
 )
-from mercari_agent.tools.mercari_tools import (  # noqa: E402
+from kaidoki.tools.mercari_tools import (  # noqa: E402
     build_mercari_tool_registry,
     SearchMercariTool,
     PriceStatisticsTool,
 )
-from mercari_agent.domain.entities.product import ProductEntity  # noqa: E402
+from kaidoki.domain.entities.product import ProductEntity  # noqa: E402
 
 
 # --------------------------------------------------------------------------- #

@@ -7,7 +7,7 @@
   python run.py status    # 检查状态
   python run.py config    # 显示配置
 
-Author: Mercari AI Agent Team (Refactored)
+Author: Kaidoki Team (Refactored)
 """
 
 import sys

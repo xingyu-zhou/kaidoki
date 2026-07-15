@@ -3,7 +3,7 @@
 
 验证基础设施层迁移的核心组件是否正常工作。
 
-Author: Mercari AI Agent Team
+Author: Kaidoki Team
 """
 
 import sys
@@ -88,7 +88,7 @@ class MigrationValidator:
     def test_exceptions(self) -> bool:
         """测试异常体系"""
         try:
-            from mercari_agent.shared.exceptions import (
+            from kaidoki.shared.exceptions import (
                 MercariAgentException,
                 ValidationError,
                 ProductNotFoundError,
@@ -129,7 +129,7 @@ class MigrationValidator:
     def test_price_value_objects(self) -> bool:
         """测试价格值对象"""
         try:
-            from mercari_agent.domain.value_objects.price import (
+            from kaidoki.domain.value_objects.price import (
                 Price, PriceRange, PriceHistory, Currency
             )
             from decimal import Decimal
@@ -160,7 +160,7 @@ class MigrationValidator:
     def test_product_attributes(self) -> bool:
         """测试商品属性值对象"""
         try:
-            from mercari_agent.domain.value_objects.product_attributes import (
+            from kaidoki.domain.value_objects.product_attributes import (
                 ProductImage, ProductImages, ProductMetadata, SellerInfo,
                 ProductStatus, ProductCategory, ProductCondition
             )
@@ -198,11 +198,11 @@ class MigrationValidator:
     def test_query_attributes(self) -> bool:
         """测试查询属性值对象"""
         try:
-            from mercari_agent.domain.value_objects.query_attributes import (
+            from kaidoki.domain.value_objects.query_attributes import (
                 SearchFilters, SearchCriteria, QueryContext, QueryMetadata,
                 QueryIntent, QueryType, QueryComplexity
             )
-            from mercari_agent.domain.value_objects.price import PriceRange
+            from kaidoki.domain.value_objects.price import PriceRange
             
             # 测试搜索过滤器
             filters = SearchFilters.create_empty()
@@ -233,8 +233,8 @@ class MigrationValidator:
     def test_product_entity(self) -> bool:
         """测试商品实体"""
         try:
-            from mercari_agent.domain.entities.product import Product
-            from mercari_agent.domain.value_objects.price import Price, Currency
+            from kaidoki.domain.entities.product import Product
+            from kaidoki.domain.value_objects.price import Price, Currency
             
             # 创建商品
             price = Price.from_float(1500.0, Currency.JPY)
@@ -267,8 +267,8 @@ class MigrationValidator:
     def test_query_entity(self) -> bool:
         """测试查询实体"""
         try:
-            from mercari_agent.domain.entities.query import Query
-            from mercari_agent.domain.value_objects.query_attributes import QueryIntent
+            from kaidoki.domain.entities.query import Query
+            from kaidoki.domain.value_objects.query_attributes import QueryIntent
             
             # 创建查询
             query = Query.create_simple("iPhone 手机")
@@ -293,7 +293,7 @@ class MigrationValidator:
     async def test_price_utils(self) -> bool:
         """测试价格工具类"""
         try:
-            from mercari_agent.shared.utils.price_utils import (
+            from kaidoki.shared.utils.price_utils import (
                 PriceParser, PriceFormatter, PriceValidator,
                 parse_price, normalize_price, format_price
             )
@@ -328,7 +328,7 @@ class MigrationValidator:
     async def test_timeout_utils(self) -> bool:
         """测试超时工具类"""
         try:
-            from mercari_agent.shared.utils.timeout_utils import (
+            from kaidoki.shared.utils.timeout_utils import (
                 TimeoutManager, execute_with_timeout, timeout_decorator
             )
             
@@ -373,7 +373,7 @@ class MigrationValidator:
     def test_config_system(self) -> bool:
         """测试配置管理系统"""
         try:
-            from mercari_agent.shared.config import (
+            from kaidoki.shared.config import (
                 ConfigManager, EnvironmentConfigSource, DictConfigSource,
                 ApplicationConfig, DatabaseConfig
             )
@@ -438,7 +438,7 @@ def main():
     validator = MigrationValidator()
     
     print("=" * 60)
-    print("Mercari AI Agent - 基础设施层迁移验证")
+    print("Kaidoki - 基础设施层迁移验证")
     print("=" * 60)
     
     success = validator.run_all_tests()

@@ -1,6 +1,6 @@
-# Mercari AI 淘货助手(个人自用)
+# Kaidoki 淘货助手(个人自用)
 
-输入一句话的购物需求,它去 Mercari 抓**真实在售商品**,顺带查**新品价**和**同产品线的更新型号**,用 Claude 给你一份"该买二手 / 买新品 / 买新型号"的判断。
+输入一句话的购物需求,它从 Mercari 抓**真实在售二手商品**,再结合 kakaku.com 和官方商店查**新品价**与**同产品线的更新型号**,用 Claude 给你一份"该买二手 / 买新品 / 买新型号"的判断。
 
 > 个人工具,非商业产品。仅供自己淘货,低频访问。
 
@@ -61,15 +61,15 @@ BEDROCK_REGION=us-west-2
 
 ```bash
 # 原生工具调用 agent(会自主查行情/新品价/新型号,给三选一判断)
-uv run mercari-agent agent --query "Bambu A1 mini 现在该买二手还是新品?有没有更新型号?"
+uv run kaidoki agent --query "Bambu A1 mini 现在该买二手还是新品?有没有更新型号?"
 
 # 固定流水线:解析 → 抓取 → LLM 重排 → 输出
-uv run mercari-agent search --query "AirPods Pro 中古 2万円以下" --max-results 5
+uv run kaidoki search --query "AirPods Pro 中古 2万円以下" --max-results 5
 
-uv run mercari-agent scrape --query "airpods" --max-products 20   # 只抓不推荐
-uv run mercari-agent parse  --query "iPhone 15 128GB 8万円以下"    # 只看解析
-uv run mercari-agent status                                        # 健康检查
-uv run mercari-agent config                                        # 查看配置
+uv run kaidoki scrape --query "airpods" --max-products 20   # 只抓不推荐
+uv run kaidoki parse  --query "iPhone 15 128GB 8万円以下"    # 只看解析
+uv run kaidoki status                                        # 健康检查
+uv run kaidoki config                                        # 查看配置
 ```
 
 `search` 选项:`--strategy {price_oriented|quality_oriented|balanced|trending}`、

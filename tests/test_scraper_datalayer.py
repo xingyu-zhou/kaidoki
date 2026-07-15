@@ -21,13 +21,13 @@ SRC = Path(__file__).resolve().parent.parent / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from mercari_agent.infrastructure.scraping.scraper_service import (  # noqa: E402
+from kaidoki.infrastructure.scraping.scraper_service import (  # noqa: E402
     ProductDataConverter,
     SearchParameterProcessor,
     PlaywrightMercariScraper,
 )
-from mercari_agent.domain.entities.product import ProductEntity  # noqa: E402
-from mercari_agent.domain.entities.query import QueryEntity  # noqa: E402
+from kaidoki.domain.entities.product import ProductEntity  # noqa: E402
+from kaidoki.domain.entities.query import QueryEntity  # noqa: E402
 
 
 # --------------------------------------------------------------------------- #

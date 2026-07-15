@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Mercari AI Agent - 主启动脚本
+Kaidoki - 主启动脚本
 
 标准化的启动入口，解决导入路径问题并提供统一的启动接口。
 
@@ -10,7 +10,7 @@ Mercari AI Agent - 主启动脚本
   python main.py config
   python main.py test
 
-Author: Mercari AI Agent Team (Refactored)
+Author: Kaidoki Team (Refactored)
 """
 
 import sys
@@ -37,7 +37,7 @@ def main():
     """主入口函数"""
     try:
         # 导入CLI模块
-        from mercari_agent.interfaces.cli.main import cli
+        from kaidoki.interfaces.cli.main import cli
         
         # 启动CLI
         cli()

@@ -34,16 +34,15 @@
 ## 安装
 
 ```bash
-cd mercari_ai_agent_refactored
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 .venv/bin/playwright install chromium
 ```
 
-LLM 走 AWS Bedrock,用 SSO 登录取凭证(浏览器交互):
+LLM 走 AWS Bedrock(浏览器交互):
 
 ```bash
-aws sso login --profile sandbox-Oregon
+aws login
 ```
 
 `.env`(参考 `.env.template`):
@@ -51,7 +50,6 @@ aws sso login --profile sandbox-Oregon
 ```
 BEDROCK_MODEL_ID=us.anthropic.claude-sonnet-4-6   # 可换 us.anthropic.claude-sonnet-5 / ...-haiku-4-5-...
 BEDROCK_REGION=us-west-2
-AWS_PROFILE=sandbox-Oregon
 # OPENAI_API_KEY=sk-...   # 可选,作为 fallback
 ```
 
@@ -76,8 +74,7 @@ AWS_PROFILE=sandbox-Oregon
 `--output-format {markdown_table|detailed_report|simple_list|json_export}`、`--language {zh|ja|en}`。
 `agent` 选项:`--max-iterations N`。
 
-运行前确保当前 shell 有 AWS 凭证(`aws sso login --profile sandbox-Oregon`),或在命令前带
-`AWS_PROFILE=sandbox-Oregon AWS_REGION=us-west-2`。
+运行前确保当前 shell 有 AWS 凭证
 
 ## 测试
 
@@ -97,6 +94,6 @@ AWS_PROFILE=sandbox-Oregon
 
 ## 项目历史(给未来的自己)
 
-搁置约一年的项目的重启。原版堆了 7 万多行代码去对抗一个**并不存在**的反爬墙,数据层从未跑通,下游全靠 mock 假数据自欺。
+搁置约一年的项目的重启。原版用LLM堆了 7 万多行代码去对抗一个**并不存在**的反爬墙,数据层从未跑通,下游全靠 mock 假数据自欺。
 
 重启只做对了一件事,后来反复受用:**先验证核心假设,再动手建设**。半天的 spike 就能确认"数据在哪、墙存不存在";之后每加一层(Playwright 数据层、原生工具调用、Bedrock/Claude、新旧型号对比)都是先 spike 验证数据路径、再实现、再实跑核对。反复印证的两条:**取结构化数据别跟渲染层较劲;"最新型号/价格"这类会过时的东西必须实时查、别信模型记忆。**

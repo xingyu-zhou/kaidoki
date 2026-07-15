@@ -39,6 +39,8 @@ from ...infrastructure.llm.llm_service import LLMService
 from ...infrastructure.scraping.scraper_service import (
     ScraperService
 )
+from ...application.services.agent_service import AgentService
+from ...tools.mercari_tools import build_mercari_tool_registry
 from ...domain.entities.query import QueryEntity
 from ...domain.entities.product import ProductEntity
 
@@ -260,6 +262,58 @@ def scrape(query, max_products):
             await cli_app.cleanup()
     
     asyncio.run(_scrape())
+
+
+@cli.command()
+@click.option('--query', required=False,
+              default="帮我在 Mercari 找性价比高的二手 AirPods Pro，预算 1 万円以内",
+              help='给 agent 的自然语言请求')
+@click.option('--max-iterations', default=6, help='agent 循环最大迭代次数')
+def agent(query, max_iterations):
+    """原生工具调用 agent：LLM 自主决定调用哪些工具（与写死的 search 流水线并存）"""
+    async def _agent():
+        try:
+            await cli_app.initialize()
+
+            # 用真实 ScraperService 后端构建工具注册表
+            registry = build_mercari_tool_registry(cli_app.scraper_service)
+            agent_service = AgentService(
+                cli_app.llm_service, registry, max_iterations=max_iterations
+            )
+
+            click.echo(f"🤖 Agent 请求: {query}")
+            click.echo(f"🧰 已注册工具: {', '.join(registry.list_tools())}\n")
+            click.echo("⏳ Agent 自主推理中（会真实调用工具抓取 Mercari）...\n")
+
+            result = await agent_service.run(query)
+
+            # 打印工具调用 trace（直观展示 LLM 自主调了哪些工具）
+            click.echo("=" * 60)
+            click.echo("🔧 工具调用 Trace")
+            click.echo("=" * 60)
+            if not result.trace:
+                click.echo("（模型未调用任何工具，直接回答）")
+            for i, step in enumerate(result.trace, 1):
+                flag = "✅" if step.ok else "❌"
+                click.echo(f"{i}. [iter {step.iteration}] {flag} {step.tool}")
+                click.echo(f"   参数: {json.dumps(step.arguments, ensure_ascii=False)}")
+                click.echo(f"   结果: {step.result_summary}")
+            click.echo(f"\n迭代轮数: {result.iterations}"
+                       f"{'（达到上限，已强制收尾）' if result.truncated else ''}")
+
+            click.echo("\n" + "=" * 60)
+            click.echo("💡 最终推荐")
+            click.echo("=" * 60)
+            click.echo(result.answer)
+            click.echo("=" * 60)
+
+        except Exception as e:
+            click.echo(f"❌ Agent 运行失败: {e}")
+            logger.error(f"Agent 运行失败: {e}", exc_info=True)
+        finally:
+            await cli_app.cleanup()
+
+    asyncio.run(_agent())
 
 
 @cli.command()

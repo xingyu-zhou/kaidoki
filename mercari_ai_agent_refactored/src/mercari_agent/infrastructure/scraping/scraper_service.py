@@ -793,11 +793,14 @@ class ScraperService:
 
     def _generate_cache_key(self, context: ScrapingContext) -> str:
         q = context.query
+        kws = getattr(q, "keywords", None) or []
         key_parts = [
             getattr(q, "original_query", "") or "",
+            ",".join(str(k) for k in kws),
             str(context.max_pages),
             str(context.max_products),
             str(getattr(q, "category", None) or "none"),
+            str(getattr(q, "condition", None) or "none"),
             str(getattr(q, "price_min", None) or 0),
             str(getattr(q, "price_max", None) or 999999),
         ]

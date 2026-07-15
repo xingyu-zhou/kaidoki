@@ -421,6 +421,67 @@ class LLMService:
         # 所有提供商都失败
         raise LLMServiceError(f"所有LLM提供商都失败，最后一个错误: {last_error}")
     
+    async def chat_with_tools(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: List[Dict[str, Any]],
+        tool_choice: Union[str, Dict[str, Any]] = "auto",
+        max_tokens: Optional[int] = None,
+        temperature: Optional[float] = None,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """原生工具调用（native function calling）。
+
+        路由到主 provider（当前为 OpenAI），使用现代 tools API 让模型自主决定
+        调用哪些工具。返回 assistant 消息 dict：
+        {"content": str|None, "tool_calls": [{"id","type","function":{"name","arguments"}}],
+         "model": str, "usage": {...}, "metadata": {...}}
+
+        Args:
+            messages: 完整对话消息列表（含 system/user/assistant/tool 各角色）
+            tools: 工具 schema 列表（可为裸 function schema 或已包裹的现代格式）
+            tool_choice: "auto" / "none" / {"type":"function",...}
+        """
+        if not self._initialized:
+            await self.initialize()
+
+        provider = self.current_provider
+        if provider is None or provider not in self.providers:
+            raise LLMServiceError("没有可用的 LLM 提供商")
+
+        llm = self.providers[provider]
+        if not hasattr(llm, "chat_with_tools"):
+            raise LLMServiceError(
+                f"提供商 {provider.value} 不支持原生工具调用（chat_with_tools）"
+            )
+
+        start_time = time.time()
+        result = await llm.chat_with_tools(
+            messages=messages,
+            tools=tools,
+            tool_choice=tool_choice,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            **kwargs
+        )
+        latency = time.time() - start_time
+
+        # 成本 / 用量跟踪（复用现有逻辑）
+        usage = result.get("usage", {})
+        cost = self._calculate_cost(provider, result.get("model", ""), usage)
+        if cost and cost > 0:
+            self.cost_tracker.add_cost(
+                provider=provider,
+                model=result.get("model", ""),
+                cost=cost,
+                tokens=usage.get("total_tokens", 0),
+            )
+        logger.info(
+            f"chat_with_tools 完成: {provider.value}, 耗时 {latency:.2f}s, "
+            f"tool_calls={len(result.get('tool_calls') or [])}"
+        )
+        return result
+
     def _handle_provider_error(self, error: Exception, provider: LLMProvider) -> LLMServiceError:
         """处理提供商错误，转换为具体的错误类型"""
         error_message = str(error)
@@ -691,6 +752,71 @@ class OpenAILLM(BaseLLM):
                 "finish_reason": response.choices[0].finish_reason,
                 "response_id": response.id
             }
+        }
+
+    async def chat_with_tools(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Union[str, Dict[str, Any]] = "auto",
+        max_tokens: Optional[int] = None,
+        temperature: Optional[float] = None,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """原生工具调用（现代 tools API）。
+
+        - 使用 `tools=[{"type":"function","function":{...}}]` 与 `tool_choice`，
+          不使用已弃用的 `functions=` / `function_call=`。
+        - 返回 assistant 消息的 `content` 与结构化的 `tool_calls`
+          （每个含 id / type / function.name / function.arguments 原始 JSON 字符串）。
+        """
+        request_params: Dict[str, Any] = {
+            "model": self.config.llm.openai_model,
+            "messages": messages,
+        }
+        if tools:
+            # 自动包裹成现代格式：允许调用方传入裸 function schema 或已包裹好的
+            wrapped = []
+            for t in tools:
+                if isinstance(t, dict) and t.get("type") == "function" and "function" in t:
+                    wrapped.append(t)
+                else:
+                    wrapped.append({"type": "function", "function": t})
+            request_params["tools"] = wrapped
+            request_params["tool_choice"] = tool_choice
+        if max_tokens is not None:
+            request_params["max_tokens"] = max_tokens
+        if temperature is not None:
+            request_params["temperature"] = temperature
+        request_params.update(kwargs)
+
+        response = await self.client.chat.completions.create(**request_params)
+        msg = response.choices[0].message
+
+        tool_calls: List[Dict[str, Any]] = []
+        for tc in (msg.tool_calls or []):
+            tool_calls.append({
+                "id": tc.id,
+                "type": "function",
+                "function": {
+                    "name": tc.function.name,
+                    "arguments": tc.function.arguments,
+                },
+            })
+
+        return {
+            "content": msg.content,
+            "tool_calls": tool_calls,
+            "model": response.model,
+            "usage": {
+                "prompt_tokens": response.usage.prompt_tokens,
+                "completion_tokens": response.usage.completion_tokens,
+                "total_tokens": response.usage.total_tokens,
+            },
+            "metadata": {
+                "finish_reason": response.choices[0].finish_reason,
+                "response_id": response.id,
+            },
         }
 
 

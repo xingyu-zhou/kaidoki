@@ -227,7 +227,12 @@ class LLMService:
             # AWS Bedrock 上的 Claude（按 model_id 匹配；匹配不到则成本记 0）
             "us.anthropic.claude-sonnet-4-6": {"input": 0.003, "output": 0.015},
             "us.anthropic.claude-3-5-sonnet-20241022-v2:0": {"input": 0.003, "output": 0.015},
-            "anthropic.claude-3-5-sonnet-20241022-v2:0": {"input": 0.003, "output": 0.015}
+            "anthropic.claude-3-5-sonnet-20241022-v2:0": {"input": 0.003, "output": 0.015},
+            # 规范化短名键（response.model 常返回短名；数值为按官方 tier 的近似值）
+            "claude-sonnet-4-6": {"input": 0.003, "output": 0.015},
+            "claude-sonnet-5": {"input": 0.003, "output": 0.015},
+            "claude-haiku-4-5-20251001": {"input": 0.001, "output": 0.005},
+            "claude-opus-4-7": {"input": 0.015, "output": 0.075}
         }
         
         # 初始化标记
@@ -545,18 +550,42 @@ class LLMService:
     
     def _calculate_cost(self, provider: LLMProvider, model: str, usage: Dict[str, Any]) -> float:
         """Calculate cost"""
-        if not usage or model not in self.pricing_map:
+        if not usage:
             return 0.0
         
-        pricing = self.pricing_map[model]
-        input_tokens = usage.get("prompt_tokens", 0)
-        output_tokens = usage.get("completion_tokens", 0)
+        pricing = self.pricing_map.get(model) or self.pricing_map.get(self._normalize_model_key(model))
+        if not pricing:
+            return 0.0
+        input_tokens = usage.get("prompt_tokens") or usage.get("input_tokens") or 0
+        output_tokens = usage.get("completion_tokens") or usage.get("output_tokens") or 0
         
         input_cost = (input_tokens / 1000) * pricing["input"]
         output_cost = (output_tokens / 1000) * pricing["output"]
         
         return input_cost + output_cost
-    
+
+    @staticmethod
+    def _normalize_model_key(model: str) -> str:
+        """把 Bedrock 的 model / inference-profile ID 规范化成定价表键。
+
+        例: 'us.anthropic.claude-sonnet-4-6' / 'claude-sonnet-4-6' -> 'claude-sonnet-4-6';
+            'us.anthropic.claude-haiku-4-5-20251001-v1:0' -> 'claude-haiku-4-5-20251001'。
+        """
+        m = model or ""
+        for prefix in ("us.", "eu.", "apac.", "global."):
+            if m.startswith(prefix):
+                m = m[len(prefix):]
+                break
+        if m.startswith("anthropic."):
+            m = m[len("anthropic."):]
+        if ":" in m:  # 去掉 ':0'
+            m = m.split(":", 1)[0]
+        if "-v" in m:  # 去掉结尾的 '-vN'
+            head, _, tail = m.rpartition("-v")
+            if tail.isdigit():
+                m = head
+        return m
+
     def _update_cost_tracking(self, provider: LLMProvider, response: LLMResponse):
         """Update cost tracking"""
         if response.cost and response.cost > 0:

@@ -1,0 +1,522 @@
+# 反检测系统配置文件
+# 
+# 该配置文件控制浏览器环境伪装系统的各种行为和参数
+# 根据不同的使用场景，可以选择不同的预设模式或进行细粒度配置
+#
+# 配置级别说明：
+# - MINIMAL: 最小伪装，性能优先
+# - STANDARD: 标准伪装，平衡性能与安全
+# - AGGRESSIVE: 激进伪装，最大程度避免检测
+# - CUSTOM: 自定义配置
+
+# ==================== 全局配置 ====================
+global:
+  # 系统模式 (stealth/balanced/performance/debugging)
+  mode: balanced
+  
+  # 是否启用反检测系统
+  enabled: true
+  
+  # 调试模式
+  debug_mode: false
+  
+  # 日志级别 (DEBUG/INFO/WARNING/ERROR)
+  log_level: INFO
+  
+  # 数据存储路径
+  data_directory: ./data/anti_detection
+
+# ==================== 环境伪装配置 ====================
+environment_spoofing:
+  # 是否启用环境伪装
+  enabled: true
+  
+  # 伪装级别 (minimal/standard/aggressive)
+  spoofing_level: standard
+  
+  # 启用的检测类型
+  enabled_detections:
+    - devtools
+    - console
+    - font_rendering
+    - window_chrome
+    - webgl
+    - canvas
+  
+  # DevTools检测绕过
+  devtools:
+    enabled: true
+    window_size_randomization: true
+    screen_properties_fix: true
+    visibility_api_fix: true
+  
+  # Console对象标准化
+  console:
+    enabled: true
+    method_standardization: true
+    memory_simulation: true
+    profile_methods: true
+  
+  # 字体渲染一致性
+  font_rendering:
+    enabled: true
+    system_font_simulation: true
+    font_fallback_enabled: true
+    metrics_randomization: true
+  
+  # Chrome对象模拟
+  chrome_object:
+    enabled: true
+    runtime_simulation: true
+    webstore_simulation: true
+    load_times_api: true
+    csi_api: true
+  
+  # 执行延迟配置
+  execution_delay:
+    enabled: true
+    min_delay_ms: 100
+    max_delay_ms: 500
+
+# ==================== 指纹管理配置 ====================
+fingerprint_management:
+  # 是否启用增强指纹管理
+  enabled: true
+  
+  # 指纹池配置
+  pool:
+    # 最大指纹数量
+    max_fingerprints: 100
+    
+    # 预生成指纹数量
+    pregenerate_count: 20
+    
+    # 指纹轮换间隔（秒）
+    rotation_interval: 1800
+    
+    # 最大使用次数
+    max_usage_count: 50
+  
+  # 质量配置
+  quality:
+    # 最小质量要求 (excellent/good/fair/poor)
+    min_quality: fair
+    
+    # 质量评估权重
+    assessment_weights:
+      user_agent_common: 0.1
+      webgl_consistency: 0.2
+      canvas_uniqueness: 0.15
+      tls_standard: 0.15
+      timing_natural: 0.1
+      headers_completeness: 0.1
+      behavior_realism: 0.2
+  
+  # 浏览器分布
+  browser_distribution:
+    chrome: 0.65
+    firefox: 0.15
+    safari: 0.10
+    edge: 0.08
+    opera: 0.02
+  
+  # 操作系统分布
+  os_distribution:
+    windows: 0.70
+    macos: 0.15
+    linux: 0.10
+    android: 0.03
+    ios: 0.02
+
+# ==================== 会话管理配置 ====================
+session_management:
+  # 是否启用增强会话管理
+  enabled: true
+  
+  # 并发配置
+  concurrency:
+    # 最大并发会话数
+    max_concurrent_sessions: 3
+    
+    # 最大连接数
+    max_connections: 10
+    
+    # 单主机最大连接数
+    max_connections_per_host: 3
+  
+  # 超时配置
+  timeouts:
+    # 会话超时（秒）
+    session_timeout: 1800
+    
+    # 空闲超时（秒）
+    idle_timeout: 300
+    
+    # 连接超时（秒）
+    connection_timeout: 30
+    
+    # 读取超时（秒）
+    read_timeout: 60
+    
+    # 总超时（秒）
+    total_timeout: 120
+  
+  # 请求间隔配置（防止CAPTCHA）- 优化以降低CAPTCHA触发率
+  request_intervals:
+    # 最小请求间隔（秒）- 增加到15秒避免频繁触发
+    min_interval: 15.0
+    
+    # 最大请求间隔（秒）- 增加到30秒
+    max_interval: 30.0
+    
+    # 是否启用随机间隔
+    randomize: true
+    
+    # 智能间隔调整
+    adaptive_intervals: true
+    
+    # CAPTCHA检测后的延迟倍数
+    captcha_delay_multiplier: 2.0
+    
+    # 错误后的延迟倍数
+    error_delay_multiplier: 1.5
+  
+  # 健康检查
+  health_check:
+    # 检查间隔（秒）
+    interval: 60
+    
+    # 检查超时（秒）
+    timeout: 10.0
+    
+    # 是否启用
+    enabled: true
+
+# ==================== TLS指纹配置 ====================
+tls_fingerprinting:
+  # 是否启用TLS指纹伪装
+  enabled: true
+  
+  # TLS版本配置
+  versions:
+    min_version: TLS_1_2
+    max_version: TLS_1_3
+  
+  # JA3/JA4指纹
+  fingerprints:
+    enable_ja3_spoofing: true
+    enable_ja4_spoofing: true
+    rotation_interval: 300
+  
+  # HTTP/2配置
+  http2:
+    enabled: true
+    settings:
+      HEADER_TABLE_SIZE: 65536
+      ENABLE_PUSH: 1
+      MAX_CONCURRENT_STREAMS: 1000
+      INITIAL_WINDOW_SIZE: 6291456
+      MAX_FRAME_SIZE: 16384
+  
+  # SSL验证
+  ssl_verification: false
+
+# ==================== 反爬虫检测与响应 ====================
+anti_bot_detection:
+  # 是否启用反爬虫检测
+  enabled: true
+  
+  # 检测算法配置
+  detection:
+    # 启用的检测类型
+    enabled_types:
+      - rule_based
+      - ml_based
+      - behavior_analysis
+      - fingerprint_analysis
+    
+    # 检测阈值
+    thresholds:
+      confidence_threshold: 0.7
+      ml_threshold: 0.6
+      behavior_threshold: 0.8
+  
+  # 自动响应配置
+  auto_response:
+    # 是否自动处理CAPTCHA
+    handle_captcha: true
+    
+    # 是否自动轮换指纹
+    auto_rotate_fingerprint: true
+    
+    # 检测冷却时间（秒）
+    cooldown_time: 300
+    
+    # 最大重试次数
+    max_retries: 3
+    
+    # 重试延迟（秒）
+    retry_delay: 60
+  
+  # JavaScript挑战处理
+  javascript_challenges:
+    enabled: true
+    timeout: 10
+    max_complexity: 1000
+
+# ==================== 行为模拟配置 ====================
+behavior_simulation:
+  # 是否启用行为模拟
+  enabled: true
+  
+  # 鼠标行为模拟
+  mouse_behavior:
+    # 移动速度（像素/秒）
+    movement_speed: 200
+    
+    # 移动曲线随机性
+    curve_randomness: 0.3
+    
+    # 点击延迟（毫秒）
+    click_delay: 50
+  
+  # 键盘行为模拟
+  keyboard_behavior:
+    # 打字速度（字符/分钟）
+    typing_speed: 200
+    
+    # 按键间隔随机性（毫秒）
+    interval_randomness: 50
+  
+  # 页面行为模拟
+  page_behavior:
+    # 滚动速度（像素/秒）
+    scroll_speed: 500
+    
+    # 停留时间（秒）
+    dwell_time: 2
+    
+    # 页面加载等待时间（秒）
+    load_wait_time: 3
+
+# ==================== 代理配置 ====================
+proxy_settings:
+  # 是否启用代理
+  enabled: false
+  
+  # 代理类型 (http/https/socks4/socks5)
+  proxy_type: http
+  
+  # 代理服务器列表
+  servers: []
+    # - host: proxy1.example.com
+    #   port: 8080
+    #   username: user1
+    #   password: pass1
+  
+  # 代理轮换
+  rotation:
+    # 是否启用轮换
+    enabled: true
+    
+    # 轮换间隔（秒）
+    interval: 600
+    
+    # 失败后轮换
+    rotate_on_failure: true
+
+# ==================== 监控与统计 ====================
+monitoring:
+  # 是否启用监控
+  enabled: true
+  
+  # 统计信息收集
+  statistics:
+    # 收集间隔（秒）
+    collection_interval: 60
+    
+    # 保留历史天数
+    retention_days: 30
+    
+    # 启用的统计类型
+    enabled_types:
+      - request_stats
+      - detection_stats
+      - fingerprint_stats
+      - session_stats
+  
+  # 性能监控
+  performance:
+    # CPU使用率阈值
+    cpu_threshold: 80
+    
+    # 内存使用率阈值
+    memory_threshold: 80
+    
+    # 监控间隔（秒）
+    monitor_interval: 30
+  
+  # 告警配置
+  alerts:
+    # 是否启用告警
+    enabled: true
+    
+    # 检测事件告警
+    detection_alerts: true
+    
+    # 性能告警
+    performance_alerts: true
+    
+    # 告警冷却时间（秒）
+    cooldown: 300
+
+# ==================== Mercari特定配置 ====================
+mercari_specific:
+  # 是否启用Mercari特定优化
+  enabled: true
+  
+  # 特殊检测点处理
+  detection_points:
+    # authCode触发处理
+    auth_code_handling: true
+    
+    # 搜索频率控制
+    search_rate_limiting: true
+    
+    # 商品详情页优化
+    product_page_optimization: true
+  
+  # 请求模式优化
+  request_patterns:
+    # 用户行为模拟
+    user_behavior_simulation: true
+    
+    # 浏览路径随机化
+    path_randomization: true
+    
+    # 停留时间模拟
+    dwell_time_simulation: true
+  
+  # 特定头部配置
+  headers:
+    # 日本语言偏好
+    accept_language: "ja,ja-JP;q=0.9,en;q=0.8"
+    
+    # 特定的Accept头
+    accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8"
+    
+    # Referer策略
+    referer_policy: "strict-origin-when-cross-origin"
+
+# ==================== 调试与开发配置 ====================
+development:
+  # 开发模式
+  dev_mode: false
+  
+  # 测试配置
+  testing:
+    # 模拟检测事件
+    simulate_detection: false
+    
+    # 测试CAPTCHA触发
+    test_captcha: false
+    
+    # 跳过延迟
+    skip_delays: false
+  
+  # 导出配置
+  export:
+    # 导出检测样本
+    export_samples: false
+    
+    # 导出路径
+    export_path: ./exports
+    
+    # 导出格式 (json/csv)
+    export_format: json
+  
+  # 性能分析
+  profiling:
+    # 是否启用性能分析
+    enabled: false
+    
+    # 分析输出路径
+    output_path: ./profiling
+    
+    # 分析间隔（秒）
+    interval: 300
+
+# ==================== 预设模式配置 ====================
+presets:
+  # 隐身模式 - 最大程度避免检测
+  stealth:
+    global:
+      mode: stealth
+    environment_spoofing:
+      spoofing_level: aggressive
+      enabled_detections:
+        - devtools
+        - console
+        - font_rendering
+        - window_chrome
+        - webgl
+        - canvas
+        - javascript_execution
+        - performance_timing
+    fingerprint_management:
+      quality:
+        min_quality: good
+      pool:
+        max_usage_count: 20
+        rotation_interval: 900
+    session_management:
+      request_intervals:
+        min_interval: 12.0
+        max_interval: 25.0
+    anti_bot_detection:
+      auto_response:
+        auto_rotate_fingerprint: true
+        cooldown_time: 600
+  
+  # 性能模式 - 优先考虑性能
+  performance:
+    global:
+      mode: performance
+    environment_spoofing:
+      spoofing_level: minimal
+      enabled_detections:
+        - devtools
+        - console
+    fingerprint_management:
+      quality:
+        min_quality: fair
+      pool:
+        max_usage_count: 100
+        rotation_interval: 3600
+    session_management:
+      concurrency:
+        max_concurrent_sessions: 10
+      request_intervals:
+        min_interval: 3.0
+        max_interval: 8.0
+    anti_bot_detection:
+      auto_response:
+        cooldown_time: 60
+  
+  # 调试模式 - 用于问题排查
+  debugging:
+    global:
+      mode: debugging
+      debug_mode: true
+      log_level: DEBUG
+    monitoring:
+      statistics:
+        collection_interval: 10
+      alerts:
+        enabled: true
+    development:
+      dev_mode: true
+      testing:
+        simulate_detection: true
+      export:
+        export_samples: true

@@ -1,0 +1,39 @@
+# ---- Secrets ----
+.env
+.env.local
+*.key
+cookies.txt
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---- Virtualenvs ----
+venv/
+.venv/
+env/
+
+# ---- Playwright browser cache (large, machine-specific) ----
+.playwright/
+ms-playwright/
+
+# ---- Logs / runtime data ----
+*.log
+logs/
+**/logs/
+data/logs/
+cache/
+**/cache/
+temp/
+tmp/
+
+# ---- OS / editor ----
+.DS_Store
+*.swp
+
+# ---- Backups (pre-restart snapshots kept in git history instead) ----
+backups/

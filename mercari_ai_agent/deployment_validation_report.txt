@@ -1,0 +1,55 @@
+============================================================
+插件框架部署验证报告
+============================================================
+验证时间: 2025-07-29T14:48:46.779941
+验证持续时间: 0.00秒
+总体结果: ❌ 失败
+
+验证摘要:
+  环境验证: ❌
+  依赖验证: ✅
+  功能验证: ❌
+  性能验证: ❌
+  总检查数: 0
+  成功检查数: 0
+  成功率: 0.00%
+
+=== ENVIRONMENT ===
+阶段状态: ❌ 失败
+  ❌ python_version: Python版本检查
+  ✅ operating_system: 操作系统信息
+  ❌ available_memory: 可用内存检查
+  ✅ file_permissions: 文件权限检查
+  错误:
+    - Python版本不符合要求: 3.11 < 3.8
+    - 可用内存不足: 842.0MB < 1000MB
+
+=== DEPENDENCIES ===
+阶段状态: ✅ 成功
+  ✅ package_asyncio: 必需包 asyncio 检查
+  ✅ package_logging: 必需包 logging 检查
+  ✅ package_json: 必需包 json 检查
+  ✅ package_dataclasses: 必需包 dataclasses 检查
+  ✅ package_typing: 必需包 typing 检查
+  ✅ package_datetime: 必需包 datetime 检查
+  ✅ package_pathlib: 必需包 pathlib 检查
+  ✅ project_imports: 项目导入检查
+
+=== FUNCTIONALITY ===
+阶段状态: ❌ 失败
+  错误:
+    - 功能验证异常: object PluginFramework can't be used in 'await' expression
+
+=== PERFORMANCE ===
+阶段状态: ❌ 失败
+  错误:
+    - 性能验证异常: Can't instantiate abstract class BasicExamplePlugin with abstract methods _create_metadata, _create_plugin_configuration, _initialize_impl, _start_impl, _stop_impl
+
+=== DEPLOYMENT ===
+阶段状态: ❌ 失败
+  ✅ directory_structure: 目录结构检查
+  ❌ smoke_tests: 冒烟测试
+  错误:
+    - 冒烟测试失败
+
+============================================================

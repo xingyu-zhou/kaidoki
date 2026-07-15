@@ -1,0 +1,229 @@
+# Mercari AI Agent 开发环境依赖
+# 包含生产环境依赖和开发工具
+
+# 包含生产环境依赖
+-r requirements.txt
+
+# 测试框架
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-mock==3.12.0
+pytest-cov==4.1.0
+pytest-xdist==3.5.0
+pytest-timeout==2.2.0
+pytest-benchmark==4.0.0
+pytest-html==4.1.1
+pytest-json-report==1.5.0
+
+# 测试工具
+coverage==7.3.2
+factory-boy==3.3.0
+faker==20.1.0
+freezegun==1.2.2
+responses==0.24.1
+httpretty==1.1.4
+mock==5.1.0
+
+# 代码质量
+black==23.11.0
+isort==5.12.0
+flake8==6.1.0
+flake8-docstrings==1.7.0
+flake8-import-order==0.18.2
+flake8-annotations==3.0.1
+bandit==1.7.5
+safety==2.3.5
+
+# 类型检查
+mypy==1.7.1
+types-requests==2.31.0.10
+types-PyYAML==6.0.12.12
+types-redis==4.6.0.11
+types-python-dateutil==2.8.19.14
+
+# 开发工具
+pre-commit==3.5.0
+commitizen==3.13.0
+bumpversion==0.6.0
+wheel==0.42.0
+
+# 文档生成
+sphinx==7.2.6
+sphinx-rtd-theme==1.3.0
+sphinx-autodoc-typehints==1.25.2
+myst-parser==2.0.0
+mkdocs==1.5.3
+mkdocs-material==9.4.8
+
+# 性能分析
+line-profiler==4.1.1
+memory-profiler==0.61.0
+py-spy==0.3.14
+scalene==1.5.26
+
+# 调试工具
+ipdb==0.13.13
+pdb++==0.10.3
+pudb==2023.1
+
+# 代码格式化
+autopep8==2.0.4
+yapf==0.40.2
+
+# 导入排序
+isort==5.12.0
+
+# 代码复杂度检查
+mccabe==0.7.0
+radon==6.0.1
+xenon==0.9.1
+
+# 安全检查
+bandit==1.7.5
+safety==2.3.5
+semgrep==1.48.0
+
+# 依赖管理
+pip-tools==7.3.0
+pipdeptree==2.13.1
+
+# 环境管理
+virtualenv==20.24.7
+virtualenvwrapper==4.8.4
+
+# 数据库迁移
+alembic==1.13.0
+
+# 监控和性能
+locust==2.17.0
+wrk==0.4.0
+
+# 数据生成
+mimesis==12.1.0
+factory-boy==3.3.0
+
+# 网络工具
+httpie==3.2.2
+curl-cffi==0.5.10
+
+# 版本控制
+gitpython==3.1.40
+
+# 构建工具
+build==1.0.3
+setuptools==68.2.2
+setuptools-scm==8.0.4
+
+# 打包工具
+twine==4.0.2
+
+# 配置管理
+python-dotenv==1.0.0
+configparser==6.0.0
+
+# 日志查看
+loguru==0.7.2
+
+# 任务自动化
+invoke==2.2.0
+fabric==3.2.2
+
+# 数据库管理
+sqlalchemy-utils==0.41.1
+sqlalchemy-migrate==0.13.0
+
+# 开发服务器
+watchdog==3.0.0
+
+# 代码统计
+cloc==0.2.2
+
+# 图表生成
+matplotlib==3.8.2
+seaborn==0.13.0
+plotly==5.17.0
+
+# 数据分析
+jupyter==1.0.0
+notebook==7.0.6
+ipython==8.17.2
+
+# 环境变量管理
+python-decouple==3.8
+
+# 时间处理
+freezegun==1.2.2
+
+# 网络模拟
+responses==0.24.1
+betamax==0.8.1
+
+# 异步测试
+pytest-asyncio==0.21.1
+asynctest==0.13.0
+
+# 并发测试
+pytest-xdist==3.5.0
+pytest-forked==1.6.0
+
+# 内存泄漏检测
+pympler==0.9
+
+# 代码覆盖率
+coverage==7.3.2
+codecov==2.1.13
+
+# 持续集成
+tox==4.11.4
+nox==2023.4.22
+
+# 依赖检查
+pip-audit==2.6.1
+cyclonedx-bom==4.1.2
+
+# 文档测试
+doctest==1.0.0
+sphinx-doctest==0.1.1
+
+# 性能基准测试
+pytest-benchmark==4.0.0
+airspeed-velocity==0.5.0
+
+# 代码重构
+rope==1.11.0
+jedi==0.19.1
+
+# 静态分析
+pylint==3.0.3
+prospector==1.10.3
+
+# 国际化
+babel==2.13.1
+
+# 开发HTTP服务器
+gunicorn==21.2.0
+
+# 容器化工具
+docker==6.1.3
+docker-compose==1.29.2
+
+# 云服务工具
+boto3==1.34.0
+google-cloud-storage==2.10.0
+
+# 监控工具
+prometheus-client==0.19.0
+grafana-api==1.0.3
+
+# 负载测试
+locust==2.17.0
+
+# 数据迁移
+pandas==2.0.3
+
+# 调试
+icecream==2.1.3
+devtools==0.12.2
+
+# 代码搜索
+ack==0.1.0

@@ -1,0 +1,228 @@
+# 开发环境配置文件
+# Mercari AI Agent Development Configuration
+
+# 应用基本信息
+app_name: "Mercari AI Agent"
+app_version: "1.0.0"
+app_description: "Mercari日本智能购物AI代理系统"
+environment: "development"
+debug: true
+
+# 数据目录
+data_dir: "./data"
+temp_dir: "./temp"
+
+# 性能配置
+max_workers: 4
+max_memory_usage: 1073741824  # 1GB
+
+# 国际化配置
+default_language: "ja"
+supported_languages: ["ja", "en", "zh"]
+
+# 特性开关
+enable_features:
+  advanced_analysis: true
+  market_trend: true
+  price_prediction: true
+  seller_verification: true
+  image_analysis: false
+  recommendation_learning: true
+
+# LLM配置
+llm:
+  # OpenAI配置
+  openai_api_key: "${OPENAI_API_KEY}"
+  openai_model: "gpt-4o-mini"
+  openai_temperature: 0.7
+  openai_max_tokens: 2000
+  openai_timeout: 30
+  
+  # Anthropic配置
+  anthropic_api_key: "${ANTHROPIC_API_KEY}"
+  anthropic_model: "claude-3.5-sonnet-20241022"
+  anthropic_temperature: 0.7
+  anthropic_max_tokens: 2000
+  anthropic_timeout: 30
+  
+  # Azure配置
+  azure_endpoint: "${AZURE_OPENAI_ENDPOINT}"
+  azure_api_key: "${AZURE_OPENAI_API_KEY}"
+  azure_api_version: "2023-12-01-preview"
+  azure_deployment: "gpt-4o-mini"
+  
+  # 通用配置
+  default_provider: "openai"
+  max_retries: 3
+  retry_delay: 1.0
+  enable_fallback: true
+  fallback_order: ["openai", "anthropic", "azure"]
+  
+  # 请求配置
+  request_timeout: 60
+  concurrent_requests: 5
+  rate_limit_requests: 100
+  rate_limit_window: 60
+
+# 爬虫配置 - P0级修复：保守配置防止CAPTCHA
+scraper:
+  # 请求配置 - P0级修复：日本本地化
+  user_agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+  timeout: 30
+  max_retries: 3
+  retry_delay: 1.0
+  
+  # 并发配置 - P0级修复：极度保守
+  max_concurrent_requests: 5  # P0级修复：降低并发数
+  max_connections: 5  # P0级修复：限制连接数
+  max_connections_per_host: 2  # P0级修复：限制单主机连接数
+  rate_limit_delay: 0.5
+  
+  # 请求间隔配置 - P0级修复：防止CAPTCHA
+  request_delay_min: 8  # P0级修复：最小请求间隔8秒
+  request_delay_max: 15  # P0级修复：最大请求间隔15秒
+  
+  # 反爬虫配置
+  enable_proxy: false
+  proxy_list: []
+  rotate_user_agents: true
+  
+  # 会话配置 - P0级修复：极度保守
+  session_pool_size: 2  # P0级修复：降低会话池大小
+  session_timeout: 300
+  
+  # 浏览器配置
+  headless: true
+  browser_timeout: 30
+  page_load_timeout: 20
+  
+  # 缓存配置
+  enable_cache: true
+  cache_ttl: 3600
+  
+  # Mercari特定配置
+  mercari_base_url: "https://jp.mercari.com"
+  mercari_search_url: "https://jp.mercari.com/search"
+  mercari_api_url: "https://api.mercari.jp/v2"
+  
+  # 页面配置
+  max_pages: 10
+  items_per_page: 48
+
+# 缓存配置
+cache:
+  # 启用配置
+  enable_memory_cache: true
+  enable_disk_cache: true
+  enable_redis_cache: false
+  
+  # 内存缓存配置
+  memory_cache_size: 1000
+  memory_cache_ttl: 3600
+  
+  # 磁盘缓存配置
+  disk_cache_dir: "./cache"
+  disk_cache_size: 104857600  # 100MB
+  disk_cache_ttl: 86400  # 24小时
+  
+  # Redis配置
+  redis_host: "localhost"
+  redis_port: 6379
+  redis_db: 0
+  redis_password: null
+  redis_ttl: 3600
+  
+  # 缓存策略
+  cache_strategy: "lru"
+  max_cache_size: 10000
+  
+  # 缓存键配置
+  key_prefix: "mercari_agent"
+  key_separator: ":"
+  
+  # 清理配置
+  auto_cleanup: true
+  cleanup_interval: 3600
+
+# 日志配置
+log:
+  # 基本配置
+  level: "DEBUG"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  
+  # 文件配置
+  log_dir: "./logs"
+  log_file: "mercari_agent.log"
+  max_file_size: 10485760  # 10MB
+  backup_count: 5
+  
+  # 控制台配置
+  console_output: true
+  console_level: "INFO"
+  
+  # 结构化日志
+  enable_json_logging: true
+  include_traceback: true
+  
+  # 性能日志
+  enable_performance_logging: true
+  slow_query_threshold: 1.0
+
+# 数据库配置
+database:
+  # SQLite配置
+  sqlite_path: "./data/mercari_agent.db"
+  sqlite_timeout: 30
+  
+  # PostgreSQL配置
+  postgres_host: "localhost"
+  postgres_port: 5432
+  postgres_user: "mercari_agent"
+  postgres_password: "${POSTGRES_PASSWORD}"
+  postgres_database: "mercari_agent"
+  
+  # 连接池配置
+  pool_size: 5
+  max_overflow: 10
+  pool_timeout: 30
+  
+  # 数据库类型
+  database_type: "sqlite"
+  
+  # 迁移配置
+  enable_auto_migration: true
+  migration_dir: "./migrations"
+
+# API配置
+api:
+  # 服务器配置
+  host: "0.0.0.0"
+  port: 8000
+  debug: true
+  
+  # 认证配置
+  enable_auth: false
+  secret_key: "dev-secret-key-change-in-production"
+  access_token_expire: 3600
+  
+  # CORS配置
+  enable_cors: true
+  cors_origins: ["*"]
+  
+  # 限流配置
+  rate_limit_enabled: true
+  rate_limit_requests: 100
+  rate_limit_window: 60
+  
+  # 文档配置
+  enable_docs: true
+  docs_url: "/docs"
+  redoc_url: "/redoc"
+  
+  # 中间件配置
+  enable_gzip: true
+  enable_request_logging: true
+  
+  # 上传配置
+  max_file_size: 10485760  # 10MB
+  allowed_file_types: [".txt", ".json", ".csv"]

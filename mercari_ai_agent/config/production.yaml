@@ -1,0 +1,244 @@
+# 生产环境配置文件
+# Mercari AI Agent Production Configuration
+
+# 应用基本信息
+app_name: "Mercari AI Agent"
+app_version: "1.0.0"
+app_description: "Mercari日本智能购物AI代理系统"
+environment: "production"
+debug: false
+
+# 数据目录
+data_dir: "/var/lib/mercari_agent/data"
+temp_dir: "/var/lib/mercari_agent/temp"
+
+# 性能配置
+max_workers: 8
+max_memory_usage: 2147483648  # 2GB
+
+# 国际化配置
+default_language: "ja"
+supported_languages: ["ja", "en", "zh"]
+
+# 特性开关
+enable_features:
+  advanced_analysis: true
+  market_trend: true
+  price_prediction: true
+  seller_verification: true
+  image_analysis: true
+  recommendation_learning: true
+
+# LLM配置
+llm:
+  # OpenAI配置
+  openai_api_key: "${OPENAI_API_KEY}"
+  openai_model: "gpt-4o-mini"
+  openai_temperature: 0.7
+  openai_max_tokens: 2000
+  openai_timeout: 30
+  
+  # Anthropic配置
+  anthropic_api_key: "${ANTHROPIC_API_KEY}"
+  anthropic_model: "claude-3.5-sonnet-20241022"
+  anthropic_temperature: 0.7
+  anthropic_max_tokens: 2000
+  anthropic_timeout: 30
+  
+  # Azure配置
+  azure_endpoint: "${AZURE_OPENAI_ENDPOINT}"
+  azure_api_key: "${AZURE_OPENAI_API_KEY}"
+  azure_api_version: "2023-12-01-preview"
+  azure_deployment: "gpt-4o-mini"
+  
+  # 通用配置
+  default_provider: "openai"
+  max_retries: 5
+  retry_delay: 2.0
+  enable_fallback: true
+  fallback_order: ["openai", "anthropic", "azure"]
+  
+  # 请求配置
+  request_timeout: 120
+  concurrent_requests: 3
+  rate_limit_requests: 50
+  rate_limit_window: 60
+
+# 爬虫配置 - P0级修复：生产环境保守配置防止CAPTCHA
+scraper:
+  # 请求配置 - P0级修复：日本本地化
+  user_agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+  timeout: 45
+  max_retries: 5
+  retry_delay: 2.0
+  
+  # 并发配置 - P0级修复：极度保守
+  max_concurrent_requests: 5  # P0级修复：保持低并发数
+  max_connections: 5  # P0级修复：限制连接数
+  max_connections_per_host: 2  # P0级修复：限制单主机连接数
+  rate_limit_delay: 1.0
+  
+  # 请求间隔配置 - P0级修复：防止CAPTCHA
+  request_delay_min: 8  # P0级修复：最小请求间隔8秒
+  request_delay_max: 15  # P0级修复：最大请求间隔15秒
+  
+  # 反爬虫配置
+  enable_proxy: true
+  proxy_list: []  # 在生产环境中配置代理列表
+  rotate_user_agents: true
+  user_agent_list:
+    - "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    - "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    - "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+  
+  # 会话配置 - P0级修复：极度保守
+  session_pool_size: 2  # P0级修复：降低会话池大小
+  session_timeout: 600
+  
+  # 浏览器配置
+  headless: true
+  browser_timeout: 60
+  page_load_timeout: 30
+  
+  # 缓存配置
+  enable_cache: true
+  cache_ttl: 7200  # 2小时
+  
+  # Mercari特定配置
+  mercari_base_url: "https://jp.mercari.com"
+  mercari_search_url: "https://jp.mercari.com/search"
+  mercari_api_url: "https://api.mercari.jp/v2"
+  
+  # 页面配置
+  max_pages: 5
+  items_per_page: 48
+
+# 缓存配置
+cache:
+  # 启用配置
+  enable_memory_cache: true
+  enable_disk_cache: true
+  enable_redis_cache: true
+  
+  # 内存缓存配置
+  memory_cache_size: 5000
+  memory_cache_ttl: 3600
+  
+  # 磁盘缓存配置
+  disk_cache_dir: "/var/lib/mercari_agent/cache"
+  disk_cache_size: 1073741824  # 1GB
+  disk_cache_ttl: 86400  # 24小时
+  
+  # Redis配置
+  redis_host: "${REDIS_HOST}"
+  redis_port: 6379
+  redis_db: 0
+  redis_password: "${REDIS_PASSWORD}"
+  redis_ttl: 3600
+  
+  # 缓存策略
+  cache_strategy: "lru"
+  max_cache_size: 50000
+  
+  # 缓存键配置
+  key_prefix: "mercari_agent_prod"
+  key_separator: ":"
+  
+  # 清理配置
+  auto_cleanup: true
+  cleanup_interval: 1800  # 30分钟
+
+# 日志配置
+log:
+  # 基本配置
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  
+  # 文件配置
+  log_dir: "/var/log/mercari_agent"
+  log_file: "mercari_agent.log"
+  max_file_size: 52428800  # 50MB
+  backup_count: 10
+  
+  # 控制台配置
+  console_output: false
+  console_level: "WARNING"
+  
+  # 结构化日志
+  enable_json_logging: true
+  include_traceback: false
+  
+  # 性能日志
+  enable_performance_logging: true
+  slow_query_threshold: 2.0
+  
+  # 特定日志配置
+  loggers:
+    mercari_agent: "INFO"
+    mercari_agent.core: "INFO"
+    mercari_agent.services: "INFO"
+    mercari_agent.scrapers: "WARNING"
+    mercari_agent.analyzers: "INFO"
+    mercari_agent.utils: "WARNING"
+    httpx: "ERROR"
+    asyncio: "ERROR"
+    selenium: "ERROR"
+
+# 数据库配置
+database:
+  # SQLite配置
+  sqlite_path: "/var/lib/mercari_agent/data/mercari_agent.db"
+  sqlite_timeout: 30
+  
+  # PostgreSQL配置
+  postgres_host: "${POSTGRES_HOST}"
+  postgres_port: 5432
+  postgres_user: "${POSTGRES_USER}"
+  postgres_password: "${POSTGRES_PASSWORD}"
+  postgres_database: "${POSTGRES_DATABASE}"
+  
+  # 连接池配置
+  pool_size: 20
+  max_overflow: 30
+  pool_timeout: 30
+  
+  # 数据库类型
+  database_type: "postgresql"
+  
+  # 迁移配置
+  enable_auto_migration: false
+  migration_dir: "/opt/mercari_agent/migrations"
+
+# API配置
+api:
+  # 服务器配置
+  host: "0.0.0.0"
+  port: 8000
+  debug: false
+  
+  # 认证配置
+  enable_auth: true
+  secret_key: "${API_SECRET_KEY}"
+  access_token_expire: 3600
+  
+  # CORS配置
+  enable_cors: true
+  cors_origins: ["${ALLOWED_ORIGINS}"]
+  
+  # 限流配置
+  rate_limit_enabled: true
+  rate_limit_requests: 60
+  rate_limit_window: 60
+  
+  # 文档配置
+  enable_docs: false
+  docs_url: "/docs"
+  redoc_url: "/redoc"
+  
+  # 中间件配置
+  enable_gzip: true
+  enable_request_logging: true
+  
+  # 上传配置
+  max_file_size: 5242880  # 5MB
+  allowed_file_types: [".txt", ".json", ".csv"]

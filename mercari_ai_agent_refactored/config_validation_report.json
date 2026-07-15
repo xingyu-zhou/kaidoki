@@ -1,0 +1,112 @@
+{
+  "timestamp": "2025-01-29T12:46:00+09:00",
+  "test_type": "配置验证测试",
+  "summary": {
+    "total_tests": 9,
+    "passed": 7,
+    "failed": 2,
+    "success_rate": 77.77777777777779
+  },
+  "detailed_results": [
+    {
+      "test": "ENV文件存在性",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "test": "ENV关键配置项",
+      "status": "PASS",
+      "details": "找到7/7个关键配置"
+    },
+    {
+      "test": "默认配置创建",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "test": "配置属性检查",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "test": "环境检测",
+      "status": "FAIL",
+      "details": "未知环境: development"
+    },
+    {
+      "test": "SQLite路径",
+      "status": "PASS",
+      "details": "路径: data/dev_mercari_agent.db"
+    },
+    {
+      "test": "数据库URL",
+      "status": "PASS",
+      "details": "URL: sqlite:///data/dev_mercari_agent.db..."
+    },
+    {
+      "test": "LLM提供商配置",
+      "status": "PASS",
+      "details": "配置的提供商: OpenAI"
+    },
+    {
+      "test": "LLM参数",
+      "status": "PASS",
+      "details": "tokens: 4000, temp: 0.7"
+    },
+    {
+      "test": "爬虫基础参数",
+      "status": "PASS",
+      "details": "重试: 3, 超时: 30"
+    },
+    {
+      "test": "User-Agent配置",
+      "status": "PASS",
+      "details": "配置了3个UA"
+    },
+    {
+      "test": "日志级别",
+      "status": "PASS",
+      "details": "级别: INFO"
+    },
+    {
+      "test": "日志目录",
+      "status": "PASS",
+      "details": "目录: data/logs"
+    },
+    {
+      "test": "环境变量-环境",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "test": "环境变量-DEBUG",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "test": "环境变量-API KEY",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "test": "有效配置验证",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "test": "无效配置验证",
+      "status": "FAIL",
+      "details": "应该抛出配置错误"
+    },
+    {
+      "test": "全局配置获取",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "test": "全局配置",
+      "status": "FAIL",
+      "details": "'str' object has no attribute 'value'"
+    }
+  ]
+}

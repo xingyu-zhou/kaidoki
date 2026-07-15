@@ -1,0 +1,31 @@
+{
+  "environment": "production",
+  "debug": false,
+  "database": {
+    "sqlite_path": "./data/prod_mercari_agent.db"
+  },
+  "llm": {
+    "max_tokens": 4000,
+    "temperature": 0.5,
+    "timeout": 60
+  },
+  "scraping": {
+    "max_retries": 5,
+    "timeout": 60,
+    "delay_range": [2, 5],
+    "max_pages": 5,
+    "max_products": 50,
+    "use_cache": true,
+    "cache_ttl": 600
+  },
+  "logging": {
+    "level": "INFO",
+    "log_dir": "./logs/prod"
+  },
+  "api": {
+    "host": "0.0.0.0",
+    "port": 8000,
+    "debug": false,
+    "rate_limit": 60
+  }
+}

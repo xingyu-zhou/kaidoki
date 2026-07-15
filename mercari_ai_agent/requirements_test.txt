@@ -1,0 +1,79 @@
+# 测试相关依赖
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.0.0
+pytest-mock>=3.10.0
+pytest-xdist>=3.0.0
+pytest-timeout>=2.1.0
+pytest-benchmark>=4.0.0
+
+# Mock和测试工具
+mock>=4.0.0
+faker>=18.0.0
+factory-boy>=3.2.0
+responses>=0.23.0
+aioresponses>=0.7.0
+
+# 代码质量工具
+flake8>=6.0.0
+black>=23.0.0
+isort>=5.12.0
+mypy>=1.0.0
+
+# 测试报告工具
+coverage>=7.0.0
+pytest-html>=3.1.0
+pytest-json-report>=1.5.0
+
+# 性能测试
+pytest-benchmark>=4.0.0
+memory-profiler>=0.61.0
+
+# 安全测试
+safety>=2.3.0
+bandit>=1.7.0
+
+# 文档测试
+doctest>=2.0.0
+pytest-doctest>=1.0.0
+
+# 测试数据生成
+hypothesis>=6.70.0
+mimesis>=7.0.0
+
+# 异步测试支持
+pytest-asyncio>=0.21.0
+asynctest>=0.13.0
+
+# 数据库测试
+pytest-postgresql>=4.1.0
+pytest-sqlite>=0.1.0
+
+# Web测试
+pytest-httpserver>=1.0.0
+pytest-mock-resources>=2.8.0
+
+# 日志测试
+pytest-logging>=2016.11.4
+loguru>=0.7.0
+
+# 配置测试
+pytest-env>=0.8.0
+python-dotenv>=1.0.0
+
+# 并行测试
+pytest-xdist>=3.0.0
+pytest-forked>=1.6.0
+
+# 测试标记
+pytest-markers>=1.0.0
+pytest-custom-exit-code>=0.3.0
+
+# 测试监控
+pytest-monitor>=1.6.0
+pytest-watch>=4.2.0
+
+# 类型检查
+mypy>=1.0.0
+types-requests>=2.28.0
+types-setuptools>=67.0.0

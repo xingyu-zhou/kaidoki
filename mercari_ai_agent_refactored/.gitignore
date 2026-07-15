@@ -1,0 +1,480 @@
+# Mercari AI Agent - Git 忽略文件
+
+# =============================================================================
+# Python
+# =============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+.pybuilder/
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# poetry
+poetry.lock
+
+# pdm
+.pdm.toml
+
+# PEP 582
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# PyCharm
+.idea/
+
+# =============================================================================
+# 项目特定文件
+# =============================================================================
+
+# 环境变量文件
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+
+# 数据文件
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# 日志文件
+logs/
+*.log
+*.log.*
+
+# 缓存文件
+cache/
+.cache/
+*.cache
+
+# 临时文件
+temp/
+tmp/
+*.tmp
+*.temp
+
+# 配置文件 (包含敏感信息)
+config/local.yaml
+config/secrets.yaml
+config/production.yaml
+config/development.yaml
+
+# 模型文件
+models/
+*.pkl
+*.joblib
+*.model
+
+# 爬虫相关
+cookies.json
+session_data/
+screenshots/
+downloads/
+
+# 浏览器相关
+.playwright/
+selenium-debug.log
+geckodriver.log
+chromedriver.log
+
+# =============================================================================
+# IDE 和编辑器
+# =============================================================================
+
+# Visual Studio Code
+.vscode/
+*.code-workspace
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# =============================================================================
+# 操作系统
+# =============================================================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# =============================================================================
+# 容器和部署
+# =============================================================================
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+.docker/
+
+# Kubernetes
+*.kubeconfig
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# =============================================================================
+# 监控和分析
+# =============================================================================
+
+# 性能分析
+*.prof
+profiles/
+.profiling/
+
+# 内存分析
+*.mprof
+memory_profiler/
+
+# 基准测试
+benchmark_results/
+.benchmarks/
+
+# =============================================================================
+# 安全和密钥
+# =============================================================================
+
+# API 密钥
+*.key
+*.pem
+*.crt
+*.p12
+secrets/
+credentials/
+
+# SSL 证书
+ssl/
+certs/
+
+# =============================================================================
+# 备份文件
+# =============================================================================
+*.bak
+*.backup
+*.old
+*.orig
+*.save
+*~
+
+# =============================================================================
+# 压缩文件
+# =============================================================================
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+# =============================================================================
+# 媒体文件
+# =============================================================================
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.tiff
+*.ico
+*.svg
+*.webp
+*.mp4
+*.avi
+*.mov
+*.wmv
+*.flv
+*.mp3
+*.wav
+*.flac
+
+# =============================================================================
+# 文档和报告
+# =============================================================================
+*.pdf
+*.doc
+*.docx
+*.xls
+*.xlsx
+*.ppt
+*.pptx
+
+# 但保留示例文档
+!docs/**/*.pdf
+!examples/**/*
+
+# =============================================================================
+# 第三方工具
+# =============================================================================
+
+# Coverage.py
+.coverage
+.coverage.*
+htmlcov/
+
+# pytest
+.pytest_cache/
+
+# tox
+.tox/
+
+# pre-commit
+.pre-commit-config.yaml
+
+# Black
+.black
+
+# isort
+.isort.cfg
+
+# flake8
+.flake8
+
+# bandit
+.bandit
+
+# Safety
+safety-report.json
+
+# =============================================================================
+# 项目特定忽略
+# =============================================================================
+
+# 开发时的测试文件
+test_*.py.bak
+debug_*.py
+scratch_*.py
+playground/
+
+# 临时脚本
+temp_script.py
+quick_test.py
+debug.py
+
+# 实验性功能
+experimental/
+prototype/
+
+# 用户特定配置
+user_config.yaml
+personal_settings.json
+
+# 本地开发数据
+local_data/
+dev_data/
+sample_data/
+
+# 性能测试结果
+perf_results/
+load_test_results/
+
+# 错误报告
+error_reports/
+crash_dumps/
+
+# 自动生成的文件
+auto_generated/
+generated/
+
+# 第三方库的本地副本
+vendor/
+third_party/
+
+# 构建产物
+build/
+dist/
+*.egg-info/
+
+# 安装包
+*.whl
+*.tar.gz
+
+# 锁文件 (根据需要调整)
+# Pipfile.lock
+# poetry.lock
+# requirements.lock
+
+# 本地配置覆盖
+local_config/
+override_config/
+
+# 开发工具配置
+.tool-versions
+.nvmrc
+.python-version
+
+# 项目特定的忽略模式
+# 添加您项目特有的文件模式

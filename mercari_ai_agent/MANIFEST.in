@@ -1,0 +1,187 @@
+# Mercari AI Agent 打包清单文件
+# 指定哪些文件应该包含在源代码分发包中
+
+# 包含重要的项目文件
+include README.md
+include LICENSE
+include CHANGELOG.md
+include CONTRIBUTING.md
+include pyproject.toml
+include setup.py
+include requirements.txt
+include requirements-dev.txt
+
+# 包含配置文件
+include config/*.yaml
+include config/*.yml
+include config/*.json
+include config/.env.template
+include config/README.md
+
+# 包含脚本
+include scripts/*.sh
+include scripts/*.py
+include run_tests.py
+
+# 包含Docker相关文件
+include Dockerfile
+include docker-compose.yml
+include .dockerignore
+
+# 包含测试文件
+recursive-include tests *.py
+recursive-include tests *.yaml
+recursive-include tests *.json
+
+# 包含源代码
+recursive-include src *.py
+recursive-include src *.yaml
+recursive-include src *.json
+recursive-include src *.txt
+
+# 包含模板和静态文件
+recursive-include src/mercari_agent/templates *
+recursive-include src/mercari_agent/static *
+recursive-include src/mercari_agent/data *
+
+# 包含文档
+recursive-include docs *.md
+recursive-include docs *.rst
+recursive-include docs *.txt
+recursive-include docs *.py
+recursive-include docs *.yaml
+recursive-include docs *.json
+recursive-include docs Makefile
+recursive-include docs make.bat
+
+# 包含示例文件
+recursive-include examples *.py
+recursive-include examples *.yaml
+recursive-include examples *.json
+recursive-include examples *.md
+
+# 包含监控配置
+recursive-include monitoring *.yaml
+recursive-include monitoring *.yml
+recursive-include monitoring *.json
+
+# 包含数据库迁移
+recursive-include migrations *.py
+recursive-include migrations *.sql
+
+# 包含本地化文件
+recursive-include locale *.po
+recursive-include locale *.pot
+recursive-include locale *.mo
+
+# 排除不需要的文件
+global-exclude *.pyc
+global-exclude *.pyo
+global-exclude *.pyd
+global-exclude __pycache__
+global-exclude .pytest_cache
+global-exclude .coverage
+global-exclude .tox
+global-exclude .git*
+global-exclude .DS_Store
+global-exclude Thumbs.db
+global-exclude *.so
+global-exclude *.dylib
+global-exclude *.egg-info
+global-exclude build
+global-exclude dist
+global-exclude .venv
+global-exclude venv
+global-exclude .env
+global-exclude *.log
+global-exclude *.tmp
+global-exclude *.bak
+global-exclude *.swp
+global-exclude *.swo
+global-exclude *~
+
+# 排除开发工具配置
+global-exclude .vscode
+global-exclude .idea
+global-exclude *.sublime-project
+global-exclude *.sublime-workspace
+
+# 排除缓存和临时文件
+global-exclude cache
+global-exclude temp
+global-exclude logs
+global-exclude data/*.db
+global-exclude data/*.sqlite
+global-exclude htmlcov
+
+# 排除部署相关文件
+global-exclude deployment
+global-exclude .ssh
+global-exclude *.pem
+global-exclude *.key
+global-exclude *.crt
+
+# 排除用户特定文件
+global-exclude user_data
+global-exclude personal
+global-exclude my_*
+global-exclude local_*
+
+# 排除第三方目录
+global-exclude vendor
+global-exclude third_party
+global-exclude node_modules
+
+# 排除系统文件
+global-exclude .fuse_hidden*
+global-exclude .nfs*
+global-exclude .directory
+global-exclude .Trash-*
+
+# 排除监控数据
+global-exclude grafana_data
+global-exclude prometheus_data
+global-exclude monitoring/data
+
+# 排除测试生成的文件
+global-exclude test_reports
+global-exclude test_results
+global-exclude coverage_html
+global-exclude .pytest_cache
+
+# 排除性能分析文件
+global-exclude *.prof
+global-exclude *.pstats
+global-exclude profile_*
+
+# 排除机器学习模型
+global-exclude *.pkl
+global-exclude *.joblib
+global-exclude *.model
+global-exclude models/*.bin
+global-exclude models/*.h5
+
+# 排除爬虫数据
+global-exclude scraped_data
+global-exclude crawl_data
+global-exclude spider_data
+
+# 排除备份文件
+global-exclude *.backup
+global-exclude *.old
+global-exclude backup_*
+
+# 排除SSL证书
+global-exclude ssl
+global-exclude certs
+global-exclude keys
+
+# 排除用户配置
+global-exclude user_config
+global-exclude local_config
+global-exclude private_config
+
+# 排除实验性代码
+global-exclude experimental
+global-exclude sandbox
+global-exclude playground

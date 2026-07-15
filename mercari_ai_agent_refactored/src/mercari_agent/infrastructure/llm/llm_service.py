@@ -43,6 +43,7 @@ logger = get_logger(__name__)
 
 class LLMProvider(Enum):
     """LLM提供商枚举"""
+    BEDROCK = "bedrock"
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
     AZURE_OPENAI = "azure_openai"
@@ -222,7 +223,11 @@ class LLMService:
             "claude-3-opus-20240229": {"input": 0.015, "output": 0.075},
             "claude-3-sonnet-20240229": {"input": 0.003, "output": 0.015},
             "claude-3-haiku-20240307": {"input": 0.00025, "output": 0.00125},
-            "claude-3-5-sonnet-20241022": {"input": 0.003, "output": 0.015}
+            "claude-3-5-sonnet-20241022": {"input": 0.003, "output": 0.015},
+            # AWS Bedrock 上的 Claude（按 model_id 匹配；匹配不到则成本记 0）
+            "us.anthropic.claude-sonnet-4-6": {"input": 0.003, "output": 0.015},
+            "us.anthropic.claude-3-5-sonnet-20241022-v2:0": {"input": 0.003, "output": 0.015},
+            "anthropic.claude-3-5-sonnet-20241022-v2:0": {"input": 0.003, "output": 0.015}
         }
         
         # 初始化标记
@@ -251,6 +256,17 @@ class LLMService:
     
     async def _initialize_providers(self):
         """初始化LLM提供商"""
+        # AWS Bedrock (Claude) —— 主 provider，优先于 OpenAI 检查/初始化
+        # 若无 AWS 凭证等原因失败，记录 error 并继续（可 fallback 到 OpenAI），不硬崩
+        if self.config.has_bedrock_config():
+            try:
+                self.providers[LLMProvider.BEDROCK] = await self._create_bedrock_provider()
+                if not self.current_provider:
+                    self.current_provider = LLMProvider.BEDROCK
+                logger.info("Bedrock (Claude) provider initialized")
+            except Exception as e:
+                logger.error(f"Failed to initialize Bedrock provider: {e}")
+
         # OpenAI
         if self.config.has_openai_config():
             try:
@@ -287,6 +303,10 @@ class LLMService:
         if not self.providers:
             raise LLMServiceError("未配置任何LLM提供商")
     
+    async def _create_bedrock_provider(self):
+        """创建 AWS Bedrock (Claude) 提供商"""
+        return BedrockClaudeLLM(self.config)
+
     async def _create_openai_provider(self):
         """创建OpenAI提供商"""
         return OpenAILLM(self.config)
@@ -878,6 +898,294 @@ class AnthropicLLM(BaseLLM):
                 "stop_reason": response.stop_reason
             }
         }
+
+
+class BedrockClaudeLLM(BaseLLM):
+    """AWS Bedrock 上的 Claude LLM 实现（新增的主 provider）。
+
+    使用 anthropic SDK 的 ``AsyncAnthropicBedrock`` 客户端，通过 boto3 的
+    profile 解析 SSO 凭证注入。对外暴露与 OpenAI provider 一致的接口：
+
+      - ``generate_response(...)`` —— 供 search 流程（query_parser / recommendation
+        / output_formatter）使用；
+      - ``chat_with_tools(...)`` —— 供 agent 循环使用，内部做 OpenAI<->Anthropic
+        的 messages / tools / tool_choice / 响应格式适配，返回 **OpenAI 风格** 的
+        assistant 消息。
+
+    因此 ``AgentService`` / ``interfaces`` 无需任何改动即可切换到 Bedrock/Claude。
+    """
+
+    def __init__(self, config):
+        super().__init__(config)
+        # config 为 AppConfig，Bedrock 字段挂在 config.llm 上
+        self.model_id = config.llm.bedrock_model_id
+        self.region = config.llm.bedrock_region
+        self.profile = config.llm.aws_profile
+        self.client = None
+        self._initialize_client()
+
+    def _initialize_client(self):
+        """用 boto3 profile 解析 SSO 凭证，初始化 AsyncAnthropicBedrock 客户端。
+
+        凭证缺失（未 aws sso login）时抛出清晰错误；该异常会被
+        ``LLMService._initialize_providers`` 的 try/except 接住，从而 fallback 到
+        其它 provider，而不是让整个服务崩掉。
+        """
+        try:
+            import boto3
+            from anthropic import AsyncAnthropicBedrock
+        except ImportError as e:
+            raise LLMServiceError(
+                f"缺少 Bedrock 依赖（需要 boto3 + anthropic）: {e}"
+            )
+
+        session = boto3.Session(profile_name=self.profile, region_name=self.region)
+        creds = session.get_credentials()
+        if creds is None:
+            raise LLMServiceError(
+                f"无 AWS 凭证，请先 aws sso login --profile {self.profile}"
+            )
+        frozen = creds.get_frozen_credentials()
+        self.client = AsyncAnthropicBedrock(
+            aws_access_key=frozen.access_key,
+            aws_secret_key=frozen.secret_key,
+            aws_session_token=frozen.token,
+            aws_region=self.region,
+        )
+
+    # ------------------------------------------------------------------ #
+    # 适配层（纯函数，便于离线单测）
+    # ------------------------------------------------------------------ #
+    @staticmethod
+    def _translate_tools(tools: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """OpenAI tools schema -> Anthropic tools schema。
+
+        兼容裸 function schema（``{"name","description","parameters"}``）或已包裹的
+        ``{"type":"function","function":{...}}``；``parameters`` -> ``input_schema``。
+        """
+        anthropic_tools: List[Dict[str, Any]] = []
+        for t in tools or []:
+            if isinstance(t, dict) and t.get("type") == "function" and "function" in t:
+                fn = t["function"]
+            else:
+                fn = t
+            anthropic_tools.append({
+                "name": fn["name"],
+                "description": fn.get("description", ""),
+                "input_schema": fn.get("parameters", {"type": "object", "properties": {}}),
+            })
+        return anthropic_tools
+
+    @staticmethod
+    def _translate_tool_choice(tool_choice: Union[str, Dict[str, Any]]) -> Dict[str, Any]:
+        """OpenAI tool_choice -> Anthropic tool_choice。不确定时当 auto。
+
+        （``"none"`` 由调用方通过“不传 tools”处理，不会走到这里。）
+        """
+        if tool_choice == "auto":
+            return {"type": "auto"}
+        if isinstance(tool_choice, dict):
+            # {"type":"function","function":{"name":...}} -> {"type":"tool","name":...}
+            if tool_choice.get("type") == "function":
+                name = (tool_choice.get("function") or {}).get("name")
+                if name:
+                    return {"type": "tool", "name": name}
+            if tool_choice.get("type") in ("auto", "any", "tool"):
+                return tool_choice
+        return {"type": "auto"}
+
+    @staticmethod
+    def _translate_messages(messages: List[Dict[str, Any]]):
+        """OpenAI 风格 messages -> (system_text, anthropic_messages)。
+
+        - 所有 ``role=="system"`` 的 content 拼成一个 system 字符串单独返回；
+        - ``role=="user"`` -> ``{"role":"user","content":content}``；
+        - ``role=="assistant"``：
+            * 有 tool_calls -> content 为 block 列表：
+              ``([text block] if content else []) + [tool_use block ...]``；
+            * 否则 -> ``{"role":"assistant","content":content}``；
+        - ``role=="tool"`` -> ``tool_result`` block；**连续的 tool 结果合并进同一个**
+          ``{"role":"user","content":[...]}``（Anthropic 要求 tool_result 紧跟
+          tool_use 的 assistant，且在同一个 user turn 里）。
+        """
+        system_parts: List[str] = []
+        result: List[Dict[str, Any]] = []
+        pending_tool_results: List[Dict[str, Any]] = []
+
+        def flush_tool_results():
+            if pending_tool_results:
+                result.append({"role": "user", "content": list(pending_tool_results)})
+                pending_tool_results.clear()
+
+        for msg in messages:
+            role = msg.get("role")
+            content = msg.get("content")
+
+            if role == "tool":
+                # 累积连续的 tool 结果，遇到非 tool 或结束时再 flush
+                pending_tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": msg.get("tool_call_id"),
+                    "content": content if content is not None else "",
+                })
+                continue
+
+            # 非 tool 消息前，先把累积的 tool 结果 flush 成一个 user turn
+            flush_tool_results()
+
+            if role == "system":
+                if content:
+                    system_parts.append(content)
+            elif role == "user":
+                result.append({"role": "user", "content": content})
+            elif role == "assistant":
+                tool_calls = msg.get("tool_calls") or []
+                if tool_calls:
+                    blocks: List[Dict[str, Any]] = []
+                    if content:
+                        blocks.append({"type": "text", "text": content})
+                    for tc in tool_calls:
+                        fn = tc.get("function", {})
+                        raw_args = fn.get("arguments") or "{}"
+                        try:
+                            parsed = json.loads(raw_args) if str(raw_args).strip() else {}
+                        except (ValueError, TypeError):
+                            parsed = {}
+                        blocks.append({
+                            "type": "tool_use",
+                            "id": tc.get("id"),
+                            "name": fn.get("name"),
+                            "input": parsed,
+                        })
+                    result.append({"role": "assistant", "content": blocks})
+                else:
+                    result.append({"role": "assistant", "content": content})
+            else:
+                # 未知 role：尽力保留
+                result.append({"role": role, "content": content})
+
+        # 末尾 flush 掉遗留的 tool 结果
+        flush_tool_results()
+
+        system_text = "\n\n".join(system_parts) if system_parts else None
+        return system_text, result
+
+    # ------------------------------------------------------------------ #
+    # 对外接口
+    # ------------------------------------------------------------------ #
+    async def generate_response(
+        self,
+        prompt: str,
+        max_tokens: Optional[int] = None,
+        temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
+        stop: Optional[List[str]] = None,
+        response_format: Optional[str] = None,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """生成响应（供 search 流程使用）。"""
+        request_params: Dict[str, Any] = {
+            "model": self.model_id,
+            "max_tokens": max_tokens or 1024,
+            "temperature": temperature if temperature is not None else 0.3,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+        if response_format == "json":
+            request_params["system"] = (
+                "You must output only valid JSON. No prose, no markdown code fences."
+            )
+        if top_p is not None:
+            request_params["top_p"] = top_p
+        if stop:
+            request_params["stop_sequences"] = stop
+
+        resp = await self.client.messages.create(**request_params)
+
+        content = "".join(
+            block.text for block in resp.content
+            if getattr(block, "type", None) == "text"
+        )
+        return {
+            "content": content,
+            "model": resp.model,
+            "usage": {
+                "input_tokens": resp.usage.input_tokens,
+                "output_tokens": resp.usage.output_tokens,
+                "total_tokens": resp.usage.input_tokens + resp.usage.output_tokens,
+            },
+            "metadata": {"stop_reason": resp.stop_reason},
+            "tool_calls": [],
+        }
+
+    async def chat_with_tools(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Union[str, Dict[str, Any]] = "auto",
+        max_tokens: Optional[int] = None,
+        temperature: Optional[float] = None,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """原生工具调用（内部做 OpenAI<->Anthropic 适配）。
+
+        返回 **OpenAI 风格** 的 assistant 消息 dict，AgentService 无需改动即可消费：
+        ``{"content": str|None, "tool_calls": [...], "model", "usage", "metadata"}``。
+        """
+        system_text, translated = self._translate_messages(messages)
+
+        request_params: Dict[str, Any] = {
+            "model": self.model_id,
+            "max_tokens": max_tokens or 1200,
+            "temperature": temperature if temperature is not None else 0.3,
+            "messages": translated,
+        }
+        if system_text:
+            request_params["system"] = system_text
+
+        # tool_choice == "none" -> 不传 tools（强制纯文本收尾）
+        if tool_choice != "none":
+            request_params["tools"] = self._translate_tools(tools or [])
+            request_params["tool_choice"] = self._translate_tool_choice(tool_choice)
+
+        resp = await self.client.messages.create(**request_params)
+
+        content_parts: List[str] = []
+        tool_calls: List[Dict[str, Any]] = []
+        for block in resp.content:
+            btype = getattr(block, "type", None)
+            if btype == "text":
+                content_parts.append(block.text)
+            elif btype == "tool_use":
+                tool_calls.append({
+                    "id": block.id,
+                    "type": "function",
+                    "function": {
+                        "name": block.name,
+                        # arguments 必须是可被 json.loads 的字符串（对齐 OpenAI 形状）
+                        "arguments": json.dumps(block.input, ensure_ascii=False),
+                    },
+                })
+        content = "".join(content_parts) if content_parts else None
+
+        return {
+            "content": content,
+            "tool_calls": tool_calls,
+            "model": resp.model,
+            "usage": {
+                "input_tokens": resp.usage.input_tokens,
+                "output_tokens": resp.usage.output_tokens,
+                "total_tokens": resp.usage.input_tokens + resp.usage.output_tokens,
+            },
+            "metadata": {"stop_reason": resp.stop_reason},
+        }
+
+    async def close(self):
+        """防御性关闭客户端（有 close 才调）。"""
+        try:
+            if self.client is not None and hasattr(self.client, "close"):
+                await self.client.close()
+        except Exception as e:  # noqa: BLE001 —— 关闭失败不应影响主流程
+            logger.debug(f"关闭 Bedrock 客户端时出错: {e}")
 
 
 class AzureOpenAILLM(BaseLLM):

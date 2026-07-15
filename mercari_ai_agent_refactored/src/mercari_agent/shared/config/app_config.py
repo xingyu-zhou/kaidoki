@@ -76,23 +76,36 @@ class LLMConfig:
     azure_openai_endpoint: Optional[str] = None
     azure_openai_deployment: str = "gpt-4"
     azure_openai_api_version: str = "2023-12-01-preview"
-    
+
+    # AWS Bedrock (Claude) 配置 —— 新增主 provider
+    # model_id 可被 env(BEDROCK_MODEL_ID) 覆盖；不同账号开通的模型不同，务必用 env 覆盖
+    # 默认 = 2026 最新 Sonnet（质量/成本均衡，支持工具调用）
+    # 备选：us.anthropic.claude-haiku-4-5-20251001-v1:0（更便宜/更快）
+    #      us.anthropic.claude-opus-4-7（更强/更贵，旗舰）
+    bedrock_model_id: str = "us.anthropic.claude-sonnet-4-6"
+    bedrock_region: str = "us-west-2"
+    aws_profile: str = "sandbox-Oregon"
+
     # 通用配置
     max_tokens: int = 4000
     temperature: float = 0.7
     timeout: int = 30
-    
+
     def has_openai_config(self) -> bool:
         """检查是否有OpenAI配置"""
         return bool(self.openai_api_key)
-    
+
     def has_anthropic_config(self) -> bool:
         """检查是否有Anthropic配置"""
         return bool(self.anthropic_api_key)
-    
+
     def has_azure_config(self) -> bool:
         """检查是否有Azure OpenAI配置"""
         return bool(self.azure_openai_api_key and self.azure_openai_endpoint)
+
+    def has_bedrock_config(self) -> bool:
+        """检查是否有 AWS Bedrock 配置（model_id 有值即算配好，默认 True）"""
+        return bool(self.bedrock_model_id)
 
 
 @dataclass
@@ -227,7 +240,12 @@ class AppConfig:
         self.llm.azure_openai_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
         self.llm.azure_openai_deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT", self.llm.azure_openai_deployment)
         self.llm.azure_openai_api_version = os.getenv("AZURE_OPENAI_API_VERSION", self.llm.azure_openai_api_version)
-        
+
+        # AWS Bedrock (Claude) —— 均可被 env 覆盖
+        self.llm.bedrock_model_id = os.getenv("BEDROCK_MODEL_ID", self.llm.bedrock_model_id)
+        self.llm.bedrock_region = os.getenv("BEDROCK_REGION", self.llm.bedrock_region)
+        self.llm.aws_profile = os.getenv("AWS_PROFILE", self.llm.aws_profile)
+
         # API配置
         self.api.host = os.getenv("API_HOST", self.api.host)
         self.api.port = int(os.getenv("API_PORT", str(self.api.port)))
@@ -333,6 +351,10 @@ class AppConfig:
     def has_azure_config(self) -> bool:
         """检查是否有Azure OpenAI配置"""
         return self.llm.has_azure_config()
+
+    def has_bedrock_config(self) -> bool:
+        """检查是否有 AWS Bedrock 配置"""
+        return self.llm.has_bedrock_config()
     
     def get_config_dict(self) -> Dict[str, Any]:
         """获取配置字典（用于日志和调试）"""
@@ -352,8 +374,11 @@ class AppConfig:
                 "openai_configured": self.llm.has_openai_config(),
                 "anthropic_configured": self.llm.has_anthropic_config(),
                 "azure_configured": self.llm.has_azure_config(),
+                "bedrock_configured": self.llm.has_bedrock_config(),
                 "openai_model": self.llm.openai_model,
                 "anthropic_model": self.llm.anthropic_model,
+                "bedrock_model_id": self.llm.bedrock_model_id,
+                "bedrock_region": self.llm.bedrock_region,
                 "max_tokens": self.llm.max_tokens,
                 "temperature": self.llm.temperature,
             },

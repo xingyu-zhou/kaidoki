@@ -8,7 +8,7 @@ import time
 import psutil
 import os
 
-from ....shared.utils.logger_utils import get_logger
+from .....shared.utils.logger_utils import get_logger
 
 logger = get_logger(__name__)
 

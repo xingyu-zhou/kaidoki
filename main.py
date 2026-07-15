@@ -45,7 +45,7 @@ def main():
     except ImportError as e:
         print(f"导入错误: {e}")
         print("请确保所有依赖都已安装：")
-        print("  pip install -r requirements.txt")
+        print("  uv sync --locked")
         sys.exit(1)
     except KeyboardInterrupt:
         print("\n程序被用户中断")

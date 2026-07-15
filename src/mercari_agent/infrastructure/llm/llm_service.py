@@ -34,7 +34,7 @@ from collections import defaultdict
 
 from ...shared.utils.logger_utils import get_logger
 from ...shared.config import get_llm_config
-from ..storage.cache.cache_manager import CacheManager
+from ..storage.cache_manager import CacheManager
 from ...tools.framework.tool_registry import ToolRegistry
 from ...tools.framework.base_tool import BaseTool, ToolResult
 
@@ -755,7 +755,7 @@ class OpenAILLM(BaseLLM):
                 timeout=self.config.llm.timeout
             )
         except ImportError:
-            raise LLMServiceError("OpenAI库未安装，请运行: pip install openai")
+            raise LLMServiceError("OpenAI库未安装，请运行: uv sync --extra openai")
     
     async def generate_response(
         self,
@@ -886,7 +886,7 @@ class AnthropicLLM(BaseLLM):
                 timeout=self.config.llm.timeout
             )
         except ImportError:
-            raise LLMServiceError("Anthropic库未安装，请运行: pip install anthropic")
+            raise LLMServiceError("Anthropic库未安装，请运行: uv sync")
     
     async def generate_response(
         self,
@@ -1236,7 +1236,7 @@ class AzureOpenAILLM(BaseLLM):
                 timeout=self.config.llm.timeout
             )
         except ImportError:
-            raise LLMServiceError("OpenAI库未安装，请运行: pip install openai")
+            raise LLMServiceError("OpenAI库未安装，请运行: uv sync --extra openai")
     
     async def generate_response(
         self,

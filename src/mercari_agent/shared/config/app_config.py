@@ -308,8 +308,9 @@ class AppConfig:
         errors = []
         
         # 验证LLM配置
-        if not (self.llm.has_openai_config() or 
-                self.llm.has_anthropic_config() or 
+        if not (self.llm.has_bedrock_config() or
+                self.llm.has_openai_config() or
+                self.llm.has_anthropic_config() or
                 self.llm.has_azure_config()):
             errors.append("至少需要配置一个LLM提供商")
         

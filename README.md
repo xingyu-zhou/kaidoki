@@ -34,10 +34,12 @@
 ## 安装
 
 ```bash
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-.venv/bin/playwright install chromium
+uv sync --locked
+uv run playwright install chromium
 ```
+
+依赖统一声明在 `pyproject.toml`,精确版本由已提交的 `uv.lock` 固定。需要启用可选的
+OpenAI fallback 时运行 `uv sync --locked --extra openai`。
 
 LLM 走 AWS Bedrock(浏览器交互):
 
@@ -59,15 +61,15 @@ BEDROCK_REGION=us-west-2
 
 ```bash
 # 原生工具调用 agent(会自主查行情/新品价/新型号,给三选一判断)
-.venv/bin/python main.py agent --query "Bambu A1 mini 现在该买二手还是新品?有没有更新型号?"
+uv run mercari-agent agent --query "Bambu A1 mini 现在该买二手还是新品?有没有更新型号?"
 
 # 固定流水线:解析 → 抓取 → LLM 重排 → 输出
-.venv/bin/python main.py search --query "AirPods Pro 中古 2万円以下" --max-results 5
+uv run mercari-agent search --query "AirPods Pro 中古 2万円以下" --max-results 5
 
-.venv/bin/python main.py scrape --query "airpods" --max-products 20   # 只抓不推荐
-.venv/bin/python main.py parse  --query "iPhone 15 128GB 8万円以下"    # 只看解析
-.venv/bin/python main.py status                                       # 健康检查
-.venv/bin/python main.py config                                       # 查看配置
+uv run mercari-agent scrape --query "airpods" --max-products 20   # 只抓不推荐
+uv run mercari-agent parse  --query "iPhone 15 128GB 8万円以下"    # 只看解析
+uv run mercari-agent status                                        # 健康检查
+uv run mercari-agent config                                        # 查看配置
 ```
 
 `search` 选项:`--strategy {price_oriented|quality_oriented|balanced|trending}`、
@@ -79,7 +81,7 @@ BEDROCK_REGION=us-west-2
 ## 测试
 
 ```bash
-.venv/bin/python -m pytest tests/ -q -o addopts=""
+uv run pytest tests/ -q -o addopts=""
 ```
 
 当前 86 个测试(数据层解析、LLM 重排/JSON、输出格式、agent 循环、Bedrock 适配、新旧型号对比),全部离线、零网络、零真实 LLM。

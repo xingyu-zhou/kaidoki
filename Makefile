@@ -1,7 +1,7 @@
 # Mercari AI Agent - 重构版 Makefile
 # 提供项目管理和开发任务的便捷命令
 
-.PHONY: help install install-dev clean test test-unit test-integration test-e2e lint format type-check security-check build run run-api run-demo docker-build docker-run docker-compose-up docker-compose-down docs docs-serve backup restore deploy validate-env setup-dev
+.PHONY: help install install-dev clean test test-unit test-integration test-e2e lint format type-check security-check build run run-api docker-build docker-run docker-compose-up docker-compose-down docs docs-serve backup restore deploy validate-env setup-dev
 
 # 默认目标
 help: ## 显示帮助信息
@@ -17,9 +17,8 @@ help: ## 显示帮助信息
 
 setup-dev: ## 设置开发环境
 	@echo "🔧 设置开发环境..."
-	python -m venv venv
-	@echo "请运行: source venv/bin/activate (Linux/Mac) 或 venv\\Scripts\\activate (Windows)"
-	@echo "然后运行: make install-dev"
+	uv sync --locked
+	uv run playwright install chromium
 
 validate-env: ## 验证环境变量
 	@echo "🔍 验证环境变量..."
@@ -31,12 +30,11 @@ validate-env: ## 验证环境变量
 
 install: ## 安装生产依赖
 	@echo "📦 安装生产依赖..."
-	pip install -e .
+	uv sync --locked --no-dev
 
 install-dev: ## 安装开发依赖
 	@echo "📦 安装开发依赖..."
-	pip install -e ".[dev]"
-	pre-commit install
+	uv sync --locked
 
 # =============================================================================
 # 代码质量
@@ -77,7 +75,7 @@ security-check: ## 安全检查
 
 test: ## 运行所有测试
 	@echo "🧪 运行所有测试..."
-	pytest
+	uv run pytest
 
 test-unit: ## 运行单元测试
 	@echo "🧪 运行单元测试..."
@@ -105,19 +103,15 @@ test-watch: ## 监视文件变化并自动运行测试
 
 build: ## 构建项目
 	@echo "🔨 构建项目..."
-	python -m build
+	uv build
 
 run: validate-env ## 运行主程序
 	@echo "🚀 运行主程序..."
-	python -m src.mercari_agent.main
+	uv run mercari-agent
 
 run-api: validate-env ## 运行API服务器
 	@echo "🚀 运行API服务器..."
-	python -m src.mercari_agent.app
-
-run-demo: validate-env ## 运行演示模式
-	@echo "🚀 运行演示模式..."
-	python -m src.mercari_agent.main --demo
+	uv run mercari-api
 
 # =============================================================================
 # Docker

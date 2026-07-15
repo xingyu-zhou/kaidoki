@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from typing import Optional, List
 import time
 
-from ....shared.utils.logger_utils import get_logger
+from .....shared.utils.logger_utils import get_logger
 
 logger = get_logger(__name__)
 

@@ -145,7 +145,10 @@ class SearchParameterProcessor:
 
     @staticmethod
     def map_status_option(value: str) -> List[str]:
-        return [value] if value else []
+        # 支持多选("1,2" → ["1","2"])，与 item_condition_id 的多选保持一致
+        if not value:
+            return []
+        return [v.strip() for v in str(value).split(",") if v.strip()]
 
     @staticmethod
     def map_shipping_method(value: Optional[str]) -> List[str]:
@@ -186,8 +189,20 @@ class SearchParameterProcessor:
                 "傷や汚れあり": "5",
                 "全体的に状態が悪い": "6",
             }
-            if query.condition in condition_mapping:
-                filters["status"] = condition_mapping[query.condition]
+            # condition 可以是单个日文成色名，也可以是逗号串 / 列表（多选，如
+            # "新品・未使用,未使用に近い" → item_condition_id=1,2）。
+            raw = (
+                query.condition
+                if isinstance(query.condition, (list, tuple))
+                else str(query.condition).split(",")
+            )
+            ids = [
+                condition_mapping[str(c).strip()]
+                for c in raw
+                if str(c).strip() in condition_mapping
+            ]
+            if ids:
+                filters["status"] = ",".join(dict.fromkeys(ids))
 
         if getattr(query, "category", None):
             filters["category_id"] = query.category
@@ -469,8 +484,10 @@ class PlaywrightMercariScraper:
         cat = str(filters.get("category_id") or "")
         if cat.isdigit():
             params["category_id"] = cat
+        # item_condition_id 支持多选（"1,2"）。仍然只在全为数字 ID 时才带上：
+        # query_parser 有时给的是分类名/成色名而非 ID，Mercari 只认数字。
         cond = str(filters.get("status") or "")
-        if cond.isdigit():
+        if re.fullmatch(r"\d+(?:,\d+)*", cond):
             params["item_condition_id"] = cond
         return f"{SEARCH_PAGE_URL}?{urlencode(params)}"
 

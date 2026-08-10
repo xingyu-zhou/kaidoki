@@ -14,7 +14,7 @@ Author: Kaidoki Team (native tools)
 """
 
 import statistics
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from .framework.base_tool import BaseTool, ToolResult, ToolStatus
 from ..domain.entities.query import QueryEntity
@@ -23,7 +23,9 @@ from ..shared.utils.logger_utils import get_logger
 
 logger = get_logger(__name__)
 
-# Mercari 商品状态（itemConditionId 对应的可读日文；scraper 只认这些精确字符串）
+# Mercari 商品状态（itemConditionId 对应的可读日文；scraper 只认这些精确字符串）。
+# 注意第一档「新品・未使用」= 全新未拆封 —— Mercari 上有大量这种"新品"，往往比
+# kakaku 的新品最安値更便宜。"只买新品"的需求**不应该**因为 Mercari 是二手平台而跳过它。
 _CONDITION_ENUM = [
     "新品・未使用",
     "未使用に近い",
@@ -32,6 +34,9 @@ _CONDITION_ENUM = [
     "傷や汚れあり",
     "全体的に状態が悪い",
 ]
+
+# "只买新品/未使用" 这类需求的推荐组合（供 prompt 与工具描述引用）
+_UNUSED_CONDITIONS = ["新品・未使用", "未使用に近い"]
 
 
 def _compact_product(p) -> Dict[str, Any]:
@@ -45,18 +50,53 @@ def _compact_product(p) -> Dict[str, Any]:
     }
 
 
+def _normalize_conditions(condition: Any) -> Tuple[List[str], List[str]]:
+    """把模型传来的 condition（字符串 / 数组 / 逗号串）拆成 (合法项, 非法项)。
+
+    历史坑：非法值曾被**静默丢弃**（`condition if condition in ENUM else None`），
+    模型传 "新品" / "未使用" 就退化成无过滤搜索且毫无提示，结果看起来"正常"但答案是错的。
+    现在非法项会被显式回报给模型，让它改用 enum 里的精确字符串重试。
+    """
+    if condition is None:
+        return [], []
+    raw = condition if isinstance(condition, (list, tuple)) else str(condition).split(",")
+    valid, invalid = [], []
+    for item in raw:
+        c = str(item).strip()
+        if not c:
+            continue
+        if c in _CONDITION_ENUM:
+            if c not in valid:
+                valid.append(c)
+        else:
+            invalid.append(c)
+    return valid, invalid
+
+
+def _invalid_condition_result(invalid: List[str]) -> ToolResult:
+    """非法 condition → 明确报错给模型（不静默降级为无过滤搜索）。"""
+    return ToolResult(
+        status=ToolStatus.ERROR,
+        error=(
+            f"condition 取值非法: {invalid}。只接受这些精确字符串: {_CONDITION_ENUM}。"
+            f"想找全新/未使用品请传 {_UNUSED_CONDITIONS}。"
+        ),
+    )
+
+
 def _build_query(
     keyword: str,
     price_min: Optional[int] = None,
     price_max: Optional[int] = None,
-    condition: Optional[str] = None,
+    conditions: Optional[List[str]] = None,
 ) -> QueryEntity:
+    # 多个成色用逗号串给下游（scraper 会拆开映射成 item_condition_id=1,2）
     return QueryEntity(
         original_query=keyword,
         keywords=[keyword],
         price_min=int(price_min) if price_min is not None else None,
         price_max=int(price_max) if price_max is not None else None,
-        condition=condition if condition in _CONDITION_ENUM else None,
+        condition=",".join(conditions) if conditions else None,
     )
 
 
@@ -67,9 +107,12 @@ class SearchMercariTool(BaseTool):
         super().__init__(
             name="search_mercari",
             description=(
-                "在 Mercari（日本二手交易平台）搜索在售商品。用于查看具体有哪些商品、"
-                "价格、成色和链接。返回紧凑商品列表（id/title/price/condition/url）。"
-                "支持价格区间与成色过滤，可按价格排序。"
+                "在 Mercari（日本个人间交易平台）搜索在售商品。返回紧凑商品列表"
+                "（id/title/price/condition/url）。支持价格区间与成色过滤，可按价格排序。"
+                "**重要：Mercari 不只有二手品** —— 成色「新品・未使用」就是全新未拆封的商品，"
+                "「未使用に近い」几乎等同全新。所以用户说『只买新品』时也应该用 "
+                "condition=[\"新品・未使用\"]（或再加「未使用に近い」）搜一次，"
+                "它常常比 kakaku 的新品最安値更便宜，不要因为『这是二手平台』而跳过。"
             ),
         )
         self.scraper = scraper_service
@@ -93,9 +136,13 @@ class SearchMercariTool(BaseTool):
                         "description": "最高价格（日元），可选。用于预算过滤。",
                     },
                     "condition": {
-                        "type": "string",
-                        "enum": _CONDITION_ENUM,
-                        "description": "商品成色过滤，可选。",
+                        "type": "array",
+                        "items": {"type": "string", "enum": _CONDITION_ENUM},
+                        "description": (
+                            "成色过滤，可选，可多选。想要全新品传 [\"新品・未使用\"]；"
+                            "放宽到几乎全新传 [\"新品・未使用\", \"未使用に近い\"]。"
+                            "必须用 enum 里的精确字符串，传别的会报错（不会被忽略）。"
+                        ),
                     },
                     "sort": {
                         "type": "string",
@@ -116,13 +163,16 @@ class SearchMercariTool(BaseTool):
         keyword: str,
         price_min: Optional[int] = None,
         price_max: Optional[int] = None,
-        condition: Optional[str] = None,
+        condition: Any = None,
         sort: Optional[str] = None,
         limit: int = 10,
         **kwargs,  # 吸收模型可能给出的多余/幻觉参数，避免整次工具调用失败
     ) -> ToolResult:
         limit = max(1, min(int(limit or 10), 30))
-        query = _build_query(keyword, price_min, price_max, condition)
+        conditions, invalid = _normalize_conditions(condition)
+        if invalid:
+            return _invalid_condition_result(invalid)
+        query = _build_query(keyword, price_min, price_max, conditions)
         # 需要按价格排序时，先抓更大样本再排序截断；否则只是把相关度前 limit 条重排，
         # 给不出预算内真正最便宜/最贵的商品。
         fetch_n = max(limit, 60) if sort in ("price_asc", "price_desc") else limit
@@ -139,6 +189,10 @@ class SearchMercariTool(BaseTool):
             status=ToolStatus.SUCCESS,
             data={
                 "keyword": keyword,
+                # 回显实际生效的过滤条件，让模型（和 trace）能看出搜的到底是什么
+                "condition_filter": conditions or None,
+                "price_min": price_min,
+                "price_max": price_max,
                 "count": len(compact),
                 "total_found": result.total_found,
                 "products": compact,
@@ -172,9 +226,12 @@ class PriceStatisticsTool(BaseTool):
                         "description": "要统计价格行情的关键词。",
                     },
                     "condition": {
-                        "type": "string",
-                        "enum": _CONDITION_ENUM,
-                        "description": "限定成色再统计，可选。",
+                        "type": "array",
+                        "items": {"type": "string", "enum": _CONDITION_ENUM},
+                        "description": (
+                            "限定成色再统计，可选，可多选。"
+                            "想知道『全新未使用品的行情』传 [\"新品・未使用\"]。"
+                        ),
                     },
                 },
                 "required": ["keyword"],
@@ -184,10 +241,13 @@ class PriceStatisticsTool(BaseTool):
     async def execute(
         self,
         keyword: str,
-        condition: Optional[str] = None,
+        condition: Any = None,
         **kwargs,  # 吸收模型可能给出的多余/幻觉参数
     ) -> ToolResult:
-        query = _build_query(keyword, condition=condition)
+        conditions, invalid = _normalize_conditions(condition)
+        if invalid:
+            return _invalid_condition_result(invalid)
+        query = _build_query(keyword, conditions=conditions)
         result = await self.scraper.scrape(query, max_products=self.sample_size)
 
         prices = sorted(
@@ -200,6 +260,7 @@ class PriceStatisticsTool(BaseTool):
                 status=ToolStatus.SUCCESS,
                 data={
                     "keyword": keyword,
+                    "condition_filter": conditions or None,
                     "count": 0,
                     "note": "未抓到带价格的在售商品",
                 },
@@ -209,7 +270,7 @@ class PriceStatisticsTool(BaseTool):
             status=ToolStatus.SUCCESS,
             data={
                 "keyword": keyword,
-                "condition": condition,
+                "condition_filter": conditions or None,
                 "count": len(prices),
                 "min": prices[0],
                 "max": prices[-1],

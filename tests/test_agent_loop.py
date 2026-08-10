@@ -100,6 +100,7 @@ class FakeLLM:
                 "messages": copy.deepcopy(messages),
                 "tools": copy.deepcopy(tools),
                 "tool_choice": tool_choice,
+                "max_tokens": max_tokens,
             }
         )
         assert self._responses, "FakeLLM 脚本响应已耗尽（可能是循环失控 / 意外的额外调用）"
@@ -456,3 +457,56 @@ async def test_max_iterations_forces_safe_termination():
     assert llm.calls[0]["tool_choice"] == "auto"
     assert llm.calls[1]["tool_choice"] == "auto"
     assert llm.calls[2]["tool_choice"] == "none"
+
+
+# --------------------------------------------------------------------------- #
+# 9) 过程可复盘：完整返回 + 每轮模型推理 + 完整对话
+# --------------------------------------------------------------------------- #
+# 这些字段不是"锦上添花"：只有摘要时，"模型为什么没去查 Mercari""它凭什么说没有
+# 后继型号"都无法复盘 —— 判断依据（newer_lookup / confidence / warnings /
+# condition_filter）全在被截掉的细节里。
+async def test_trace_keeps_full_result_reasoning_and_conversation():
+    scraper = FakeScraperService(_products(), total_found=15000)
+    registry = build_mercari_tool_registry(scraper)
+    llm = FakeLLM(
+        [
+            _assistant_tool_call(
+                "call_1", "search_mercari",
+                '{"keyword": "AirPods Pro", "condition": ["新品・未使用"]}',
+                content="先查一下 Mercari 的全新未使用品。",
+            ),
+            _assistant_final("推荐如下 ..."),
+        ]
+    )
+    agent = AgentService(llm, registry)
+
+    result = await agent.run("AirPods Pro 只买新品")
+
+    step = result.trace[0]
+    # 完整返回可解析，且能看到实际生效的成色过滤
+    payload = json.loads(step.result_full)
+    assert payload["condition_filter"] == ["新品・未使用"]
+    assert payload["products"]
+    assert step.result_summary.startswith("condition=")
+    assert step.duration_ms >= 0
+
+    # 每轮模型的可见推理 + 它选了哪些工具
+    assert len(result.notes) == 2
+    assert result.notes[0]["text"] == "先查一下 Mercari 的全新未使用品。"
+    assert result.notes[0]["tools_called"] == ["search_mercari"]
+    assert result.notes[1]["tools_called"] == []
+
+    # 完整对话可落盘复盘
+    roles = [m["role"] for m in result.messages]
+    assert roles == ["system", "user", "assistant", "tool", "assistant"]
+    assert result.to_dict()["trace"][0]["result_full"] == step.result_full
+
+
+async def test_max_tokens_is_configurable_and_passed_through():
+    """默认 1200 会把"四选一 + 每项附 url"的长回答截在半句话上。"""
+    scraper = FakeScraperService(_products())
+    registry = build_mercari_tool_registry(scraper)
+    llm = FakeLLM([_assistant_final("ok")])
+    agent = AgentService(llm, registry, max_tokens=4000)
+    await agent.run("x")
+    assert llm.calls[0]["max_tokens"] == 4000

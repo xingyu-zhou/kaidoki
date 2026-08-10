@@ -158,6 +158,25 @@ class APIConfig:
     rate_limit: int = 100  # 每分钟请求数
 
 
+@dataclass
+class BenchmarkConfig:
+    """Google 对照基线配置（只用于打分，不参与 agent 推理）。
+
+    没配 google_api_key / google_cse_id 时整个对照静默跳过，不影响主流程。
+    ca_bundle:企业代理(Netskope 等)对 googleapis.com 做 TLS 中间人时需要它的 CA；
+    默认沿用进程环境里的 SSL_CERT_FILE。
+    """
+    google_api_key: Optional[str] = None
+    google_cse_id: Optional[str] = None
+    serp_top_n: int = 10
+    output_path: str = "benchmarks/google_compare.jsonl"
+    ca_bundle: Optional[str] = None
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self.google_api_key and self.google_cse_id)
+
+
 class AppConfig:
     """
     应用配置类
@@ -181,6 +200,7 @@ class AppConfig:
         self.scraping = ScrapingConfig()
         self.logging = LoggingConfig()
         self.api = APIConfig()
+        self.benchmark = BenchmarkConfig()
         
         # 基础配置
         self.debug = False
@@ -254,7 +274,17 @@ class AppConfig:
         # 日志配置
         self.logging.level = os.getenv("LOG_LEVEL", self.logging.level)
         self.logging.log_dir = os.getenv("LOG_DIR", self.logging.log_dir)
-    
+
+        # Google 对照基线（可选：没配就静默跳过）
+        self.benchmark.google_api_key = os.getenv("GOOGLE_API_KEY")
+        self.benchmark.google_cse_id = os.getenv("GOOGLE_CSE_ID")
+        self.benchmark.output_path = os.getenv("BENCHMARK_PATH", self.benchmark.output_path)
+        self.benchmark.serp_top_n = int(
+            os.getenv("BENCHMARK_TOP_N", str(self.benchmark.serp_top_n))
+        )
+        # 未显式指定则让客户端自己回退到 SSL_CERT_FILE
+        self.benchmark.ca_bundle = os.getenv("BENCHMARK_CA_BUNDLE")
+
     def _load_config_file(self):
         """加载配置文件"""
         try:

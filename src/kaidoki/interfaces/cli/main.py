@@ -40,6 +40,14 @@ from ...infrastructure.scraping.scraper_service import (
     ScraperService
 )
 from ...application.services.agent_service import AgentService
+from ...application.services.benchmark_service import (
+    SCORING_VERSION,
+    BenchmarkService,
+    load_records,
+    rescore_record,
+    summarize,
+)
+from ...infrastructure.search.google_search import GoogleCseClient
 from ...tools.mercari_tools import build_mercari_tool_registry
 from ...domain.entities.query import QueryEntity
 from ...domain.entities.product import ProductEntity
@@ -269,7 +277,15 @@ def scrape(query, max_products):
               default="帮我在 Mercari 找性价比高的二手 AirPods Pro，预算 1 万円以内",
               help='给 agent 的自然语言请求')
 @click.option('--max-iterations', default=6, help='agent 循环最大迭代次数')
-def agent(query, max_iterations):
+@click.option('--trace-file', default=None, type=click.Path(dir_okay=False),
+              help='把完整过程（system prompt / 每轮推理 / 每次工具调用的完整入参与返回 / '
+                   '完整对话）写成 JSON，用于事后复盘和改 prompt')
+@click.option('--result-chars', default=1200, show_default=True,
+              help='终端上每次工具返回打印多少字符（完整内容用 --trace-file 落盘）')
+@click.option('--google-benchmark/--no-google-benchmark', default=True, show_default=True,
+              help='跑完后额外记一份 Google 检索结果作对照基线（只用于打分，不进 agent 的输入）。'
+                   '未配置 GOOGLE_API_KEY / GOOGLE_CSE_ID 时自动跳过')
+def agent(query, max_iterations, trace_file, result_chars, google_benchmark):
     """原生工具调用 agent：LLM 自主决定调用哪些工具（与写死的 search 流水线并存）"""
     async def _agent():
         try:
@@ -292,25 +308,74 @@ def agent(query, max_iterations):
 
             result = await agent_service.run(query)
 
-            # 打印工具调用 trace（直观展示 LLM 自主调了哪些工具）
+            # ---- 完整过程：按迭代轮把「模型怎么想的」和「工具返回了什么」交错打出 ----
+            # 只打摘要会藏掉判断依据（newer_lookup / confidence / warnings /
+            # condition_filter 都在细节里），复盘时看不出结论错在哪一环。
             click.echo("=" * 60)
-            click.echo("🔧 工具调用 Trace")
+            click.echo("🔍 执行过程（模型推理 + 工具调用）")
             click.echo("=" * 60)
-            if not result.trace:
+            if not result.trace and not result.notes:
                 click.echo("（模型未调用任何工具，直接回答）")
-            for i, step in enumerate(result.trace, 1):
-                flag = "✅" if step.ok else "❌"
-                click.echo(f"{i}. [iter {step.iteration}] {flag} {step.tool}")
-                click.echo(f"   参数: {json.dumps(step.arguments, ensure_ascii=False)}")
-                click.echo(f"   结果: {step.result_summary}")
+
+            steps_by_iter = {}
+            for step in result.trace:
+                steps_by_iter.setdefault(step.iteration, []).append(step)
+
+            for note in result.notes:
+                it = note["iteration"]
+                click.echo(f"\n── iter {it} ──")
+                if note["text"].strip():
+                    click.echo("🧠 模型判断:")
+                    for line in note["text"].strip().splitlines():
+                        click.echo(f"   {line}")
+                else:
+                    click.echo("🧠 模型判断: （无文字，直接调工具）")
+                called = [t for t in note["tools_called"] if t]
+                click.echo(f"🧰 本轮调用: {', '.join(called) if called else '（无，输出最终回答）'}")
+
+                for j, step in enumerate(steps_by_iter.get(it, []), 1):
+                    flag = "✅" if step.ok else "❌"
+                    click.echo(f"\n  {j}) {flag} {step.tool}  ({step.duration_ms} ms)")
+                    click.echo(f"     入参: {json.dumps(step.arguments, ensure_ascii=False)}")
+                    click.echo(f"     摘要: {step.result_summary}")
+                    body = step.result_full or ""
+                    shown = body[:result_chars]
+                    click.echo("     返回: " + shown.replace("\n", "\n           "))
+                    if len(body) > len(shown):
+                        click.echo(f"     …（已截断 {len(body) - len(shown)} 字符，"
+                                   f"完整内容见 --trace-file）")
+
             click.echo(f"\n迭代轮数: {result.iterations}"
                        f"{'（达到上限，已强制收尾）' if result.truncated else ''}")
+
+            if trace_file:
+                payload = result.to_dict()
+                payload["query"] = query
+                payload["system_prompt"] = agent_service.system_prompt
+                payload["registered_tools"] = registry.list_tools()
+                path = Path(trace_file)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(
+                    json.dumps(payload, ensure_ascii=False, indent=2, default=str),
+                    encoding="utf-8",
+                )
+                click.echo(f"📄 完整过程已写入: {path}")
 
             click.echo("\n" + "=" * 60)
             click.echo("💡 最终推荐")
             click.echo("=" * 60)
             click.echo(result.answer)
             click.echo("=" * 60)
+
+            # ---- Google 对照基线 ----
+            # 放在最后、包在自己的 try 里：推荐已经拿到了，打分失败绝不能连带毁掉它。
+            # 只读 result，不回写 result.messages —— 否则模型下次会抄 Google 的数字。
+            if google_benchmark:
+                try:
+                    await _run_google_benchmark(query, result)
+                except Exception as e:  # noqa: BLE001
+                    click.echo(f"⚠️  Google 对照失败（不影响以上推荐）: {e}")
+                    logger.warning(f"Google 对照失败: {e}", exc_info=True)
 
         except Exception as e:
             click.echo(f"❌ Agent 运行失败: {e}")
@@ -319,6 +384,127 @@ def agent(query, max_iterations):
             await cli_app.cleanup()
 
     asyncio.run(_agent())
+
+
+def _benchmark_config():
+    """拿 BenchmarkConfig。
+
+    `benchmark` 子命令不需要 LLM/浏览器，因此不走 cli_app.initialize()，
+    那时 cli_app.config 还是 None —— 直接 get_config()，否则会静默忽略
+    BENCHMARK_PATH 之类的环境变量、去读一个错误的默认路径。
+    """
+    if getattr(cli_app, "config", None) is not None:
+        return cli_app.config.benchmark
+    return get_config().benchmark
+
+
+def _verdict_icon(verdict: str) -> str:
+    return {"win": "🏆", "tie": "🤝", "loss": "❌", "n/a": "➖"}.get(verdict, "➖")
+
+
+def _print_comparison(label: str, comp: dict) -> None:
+    """打一段对照结果。loss 时把漏项列出来 —— 那才是要改的东西。"""
+    verdict = comp.get("verdict", "n/a")
+    click.echo(f"  [{label}] {_verdict_icon(verdict)} {verdict.upper()} — {comp.get('reason', '')}")
+    if comp.get("our_best"):
+        ob = comp["our_best"]
+        extra = f" [{'/'.join(ob.get('model_nos') or []) or '型番不明'}]"
+        click.echo(f"     我方最低: ¥{ob['price']:,} ({ob.get('source')}){extra} "
+                   f"{ob.get('title', '')[:40]}")
+    if comp.get("google_best"):
+        gb = comp["google_best"]
+        mark = "" if gb.get("verified") else " ⚠未核验(摘要提取)"
+        click.echo(f"     Google 最低: ¥{gb['price']:,} #{gb.get('rank')}{mark} "
+                   f"{gb.get('title', '')[:40]}")
+    # 同型番才谈得上"谁更便宜"。不同型号之间的价差里混着规格差异，
+    # 只看数字会得出反向结论（实测 kakaku ¥28,000 的是 Lightning 版旧款尾货）。
+    kind = comp.get("comparability")
+    if kind == "different_model":
+        click.echo("     ⚠ 双方最低价不是同一型番 —— 价差含规格差异，不能当性价比结论")
+    elif kind == "unknown":
+        click.echo("     ⚠ 至少一侧未注明型番 —— 无法确认是否同款")
+    # 只有真拿到 Google 数据才谈排名。取数失败时这个键根本不存在 ——
+    # 若照样打"未出现在 top-N"，会被误读成"查过了、确实没有"，正是要避免的那类假结论。
+    if "our_pick_google_rank" in comp:
+        rank = comp["our_pick_google_rank"]
+        click.echo(f"     我方推荐在 Google 的排名: {rank if rank else '未出现在 top-N'}")
+    for m in (comp.get("miss") or [])[:3]:
+        mark = "" if m.get("verified") else " ⚠未核验"
+        click.echo(f"     ↳ 漏项 #{m['rank']} ¥{m['price']:,}{mark} {m.get('title', '')[:40]}")
+        click.echo(f"        {m.get('link', '')}")
+
+
+async def _run_google_benchmark(query: str, result) -> None:
+    """跑一次 Google 对照并打摘要。未配 key 就提示一句后跳过。"""
+    bench_cfg = _benchmark_config()
+    client = GoogleCseClient(
+        api_key=bench_cfg.google_api_key,
+        cse_id=bench_cfg.google_cse_id,
+        top_n=bench_cfg.serp_top_n,
+        ca_bundle=bench_cfg.ca_bundle,
+    )
+    output = Path(bench_cfg.output_path)
+    service = BenchmarkService(client, output)
+
+    if not service.enabled:
+        click.echo("\n➖ Google 对照未启用（未配置 GOOGLE_API_KEY / GOOGLE_CSE_ID）")
+        return
+
+    click.echo("\n" + "=" * 60)
+    click.echo("📊 Google 对照基线（google_cse，不参与 agent 推理）")
+    click.echo("=" * 60)
+    record = await service.compare(query, result)
+    click.echo(f"原样 query: {record.get('raw_query')}")
+    click.echo(f"公平 query: {record.get('fair_query') or '（未能从 trace 构造）'}")
+    for label in ("fair", "raw"):
+        comp = (record.get("comparisons") or {}).get(label)
+        if comp:
+            _print_comparison(label, comp)
+    click.echo(f"📄 已追加到: {output}")
+
+
+@cli.command()
+@click.option('--last', default=10, show_default=True, help='显示最近 N 条')
+@click.option('--key', type=click.Choice(['fair', 'raw']), default='fair', show_default=True,
+              help='用哪份 query 的分数统计（fair = 日文型号+最安値，基线更硬）')
+@click.option('--rescore', is_flag=True,
+              help='用当前打分逻辑重算历史记录（从已存的原始结果算，不再打 Google API）')
+@click.option('--write', is_flag=True,
+              help='配合 --rescore：把重算结果写回文件（会覆盖原文件）')
+def benchmark(last, key, rescore, write):
+    """查看 / 重算 Google 对照记分板"""
+    path = Path(_benchmark_config().output_path)
+    records = load_records(path)
+    if not records:
+        click.echo(f"暂无记录: {path}")
+        return
+
+    if rescore:
+        records = [rescore_record(r) for r in records]
+        click.echo(f"♻️  已用当前打分逻辑（scoring_version={SCORING_VERSION}）重算 {len(records)} 条")
+        if write:
+            path.write_text(
+                "".join(json.dumps(r, ensure_ascii=False, default=str) + "\n" for r in records),
+                encoding="utf-8",
+            )
+            click.echo(f"💾 已写回 {path}")
+
+    stats = summarize(records, key=key)
+    click.echo(f"\n📊 记分板（{path}，按 {key} query 统计）")
+    click.echo(f"   共 {stats['total']} 条，其中可判定 {stats['decided']} 条")
+    click.echo(f"   🏆 win {stats['win']}  🤝 tie {stats['tie']}  ❌ loss {stats['loss']}"
+               f"  ➖ n/a {stats['n/a']}")
+    if stats["win_rate"] is not None:
+        click.echo(f"   胜率: {stats['win_rate']:.1%}")
+
+    click.echo(f"\n最近 {min(last, len(records))} 条:")
+    for r in records[-last:]:
+        comp = (r.get("comparisons") or {}).get(key) or {}
+        verdict = comp.get("verdict", "n/a")
+        click.echo(f"\n─ {r.get('ts')}  {_verdict_icon(verdict)} {verdict.upper()}")
+        click.echo(f"  query: {r.get('raw_query')}")
+        if comp:
+            _print_comparison(key, comp)
 
 
 @cli.command()

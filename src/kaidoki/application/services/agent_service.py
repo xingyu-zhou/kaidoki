@@ -22,6 +22,7 @@ Author: Kaidoki Team (native tools)
 """
 
 import json
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -132,6 +133,20 @@ SYSTEM_PROMPT = f"""你是一个会使用工具的日本购物比价助手（Mer
     不要拿那个中位数下结论。
   - `unfiltered` 是未过滤的原始统计，只用于对照，不要拿它当行情。
 
+【R12】**工具没取到价格时，禁止给出任何估算数字。**
+  不许写"〜¥30,000前後と推定"、"だいたい¥5万くらい"、也不许把凭记忆的定価填进对比表。
+  只能写"未取到（工具返回 note/无数据），请到 kakaku.com 搜索『<型番>』自行确认"。
+  实测违规一次：WF-1000XM5 的 kakaku 数据没取到，回答里估了"¥30,000前後"，
+  真实是 **¥24,605** —— 差 ¥5,400，而且它出现在推荐表格里，读者会当成查到的数据。
+  一个带"推定"标签的错数字，危害不比不带标签的小。
+
+【R13】注意 `searched_model.warnings` 里的 **未発売**。kakaku 会提前登记発売预定品，
+  显示的价格与店舗数是预约信息。这类机型**不能**放进"现在就买哪个"的推荐里 ——
+  最多作为"再等等看"的备注。实测违规一次：ドルツ EW-DA19/DA49（発売予定 2026-09）
+  被列成了"まず試したい・コスパ重視"的可买选项。
+  另外留意 `category`：它是 kakaku 的品类名。若与用户想买的东西不符
+  （例如查主机却返回「Nintendo Switch ソフト」），说明选型错了，不要用那个价格。
+
 ═══ 工作方式 ═══
 1. 直接的"找 X 好货" → 一次 recommend_deals 通常就够。
 2. 需要比较、先查行情再判断 → search_mercari + get_price_statistics 组合（可多次）。
@@ -190,6 +205,8 @@ class AgentResult:
     notes: List[Dict[str, Any]] = field(default_factory=list)
     # 完整对话（system/user/assistant/tool），供落盘复盘用
     messages: List[Dict[str, Any]] = field(default_factory=list)
+    # 回答里出现但工具返回里没有的金额 —— 无来源的价格（见 ungrounded_prices）
+    ungrounded_prices: List[int] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -197,9 +214,87 @@ class AgentResult:
             "iterations": self.iterations,
             "truncated": self.truncated,
             "notes": self.notes,
+            "ungrounded_prices": self.ungrounded_prices,
             "trace": [s.to_dict() for s in self.trace],
             "messages": self.messages,
         }
+
+
+_YEN_IN_TEXT = re.compile(r"[¥￥]\s*([\d,]{3,})|([\d,]{3,})\s*円")
+
+
+def _yen_amounts(text: str) -> List[int]:
+    """从文本里抽出所有日元金额（去重）。"""
+    out = set()
+    for m in _YEN_IN_TEXT.finditer(text or ""):
+        raw = m.group(1) or m.group(2) or ""
+        digits = raw.replace(",", "")
+        if digits.isdigit() and 100 <= int(digits) <= 5_000_000:
+            out.add(int(digits))
+    return sorted(out)
+
+
+def _numbers_in(raw: str) -> List[int]:
+    """从工具返回（JSON）里收集所有可能是金额的整数。
+
+    刻意宽松（把 shops / 年份之类也收进来）—— 这个集合只用来判断"回答里的数字有没有来源"，
+    宁可多收（漏报几个无来源数字）也不要少收（把有来源的数字误报成编造）。
+    """
+    out: set = set()
+
+    def walk(node: Any) -> None:
+        if isinstance(node, bool):
+            return
+        if isinstance(node, int):
+            if 100 <= node <= 5_000_000:
+                out.add(node)
+        elif isinstance(node, float):
+            walk(int(node))
+        elif isinstance(node, str):
+            for m in re.finditer(r"\d[\d,]{2,}", node):
+                d = m.group(0).replace(",", "")
+                if d.isdigit() and 100 <= int(d) <= 5_000_000:
+                    out.add(int(d))
+        elif isinstance(node, dict):
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+
+    try:
+        walk(json.loads(raw))
+    except (ValueError, TypeError):
+        return _yen_amounts(raw)
+    return sorted(out)
+
+
+def ungrounded_prices(answer: str, trace: List["TraceStep"]) -> List[int]:
+    """回答里出现、但**任何工具返回里都没有**的金额。
+
+    为什么需要这个:prompt 规则管不住模型。实测两次它在工具返回"无数据"后
+    仍然凭自有知识写出了价格 —— WF-1000XM5 估成 "¥30,000前後"（真实 ¥24,605）、
+    Switch 2 直接写 "¥49,980"（这次凑巧是对的，但它不在任何工具返回里）。
+    规则靠不住，检查才靠得住:把"这个数字没有来源"这件事变成可见的信号。
+
+    差额会被排除（"便宜了 ¥6,000" 这类是从工具数字算出来的，不是无据之谈）。
+    """
+    tool_prices: set = set()
+    for step in trace or []:
+        raw = getattr(step, "result_full", None) or ""
+        # 工具返回是 JSON，价格是**裸数字**（"new_price_min": 24605），既没有 ¥ 也没有 円。
+        # 所以这一侧必须走 JSON 遍历 —— 用 ¥/円 正则会一个都抓不到，
+        # 结果把回答里每个数字都报成"无来源"，检查直接变成噪音。
+        tool_prices.update(_numbers_in(raw))
+    if not tool_prices:
+        return _yen_amounts(answer)
+
+    diffs = {abs(a - b) for a in tool_prices for b in tool_prices}
+    sums = {a + b for a in tool_prices for b in tool_prices}
+    return [
+        p for p in _yen_amounts(answer)
+        if p not in tool_prices and p not in diffs and p not in sums
+    ]
 
 
 def _summarize_result(data_str: str, limit: int = 400) -> str:
@@ -333,6 +428,7 @@ class AgentService:
                     truncated=False,
                     notes=notes,
                     messages=messages,
+                    ungrounded_prices=ungrounded_prices(content or "", trace),
                 )
 
             # 逐个执行 tool_calls，结果作为 role:"tool" 消息追加
@@ -390,4 +486,5 @@ class AgentService:
             truncated=True,
             notes=notes,
             messages=messages + [closing, {"role": "assistant", "content": answer}],
+            ungrounded_prices=ungrounded_prices(answer, trace),
         )

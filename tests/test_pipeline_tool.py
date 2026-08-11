@@ -80,7 +80,7 @@ class _FakeRecommendation:
 
 def _products(n=4):
     return [
-        ProductEntity(id=f"m{i}", title=f"AirPods {i}", price=1000 * i,
+        ProductEntity(id=f"m{i}", title=f"AirPods Pro 第2世代 本体 {i}", price=1000 * i,
                       condition="新品・未使用", url=f"https://jp.mercari.com/item/m{i}")
         for i in range(1, n + 1)
     ]
@@ -109,7 +109,7 @@ async def test_recommend_deals_runs_full_pipeline():
 
     # 流程确实被逐段走通:parse → scrape(max_results*2) → recommend(strategy 透传)
     assert parser.calls == ["AirPods Pro 5000円以下"]
-    assert scraper.calls[0][1] == 6  # max_results * 2
+    assert scraper.calls[0][1] == 12  # max_results * 4（过滤会砍掉一部分，多抓一些）
     assert rec.calls[0][2] == "price_oriented"
 
 
@@ -150,3 +150,50 @@ def test_registry_adds_pipeline_tool_with_services():
     )
     tools = set(reg.list_tools())
     assert tools == {"search_mercari", "get_price_statistics", "recommend_deals"}
+
+
+# --------------------------------------------------------------------------- #
+# 固定流水线也必须过滤（它曾是唯一绕过全部过滤的入口）
+# --------------------------------------------------------------------------- #
+@pytest.mark.asyncio
+async def test_recommend_deals_filters_accessories_and_wrong_products():
+    """实测查 "パタゴニア レトロX フリース 中古 安い" 时，这条流水线的 top1 是
+    ¥3,000 的**童装**(12-18M) —— 因为它完全不过滤。"""
+    q = QueryEntity(original_query="パタゴニア レトロX フリース",
+                    keywords=["パタゴニア", "レトロX", "フリース"])
+    products = [
+        ProductEntity(id="ok", title="Patagonia レトロX フリース ジャケット L 美品",
+                      price=18000, condition="目立った傷や汚れなし",
+                      url="https://jp.mercari.com/item/ok"),
+        ProductEntity(id="kid", title="パタゴニア レトロX フリース 保護フィルム",
+                      price=3000, condition="新品・未使用",
+                      url="https://jp.mercari.com/item/kid"),
+        ProductEntity(id="other", title="ノースフェイス デナリジャケット L",
+                      price=9000, condition="目立った傷や汚れなし",
+                      url="https://jp.mercari.com/item/other"),
+    ]
+    tool = RecommendMercariTool(_FakeScraper(products), _FakeQueryParser(q), _FakeRecommendation())
+    data = (await tool.call(query="パタゴニア レトロX フリース")).data
+
+    assert data["filtered"]["basis"] == "body_only"
+    assert data["filtered"]["scraped"] == 3
+    assert data["filtered"]["kept"] == 1
+    assert set(data["filtered"]["excluded_by"]) == {"accessory", "wrong_product"}
+    # 罗马字 "Patagonia" 也要认出来（品牌别名表）
+    assert [p["id"] for p in data["products"]] == ["ok"]
+
+
+@pytest.mark.asyncio
+async def test_recommend_deals_reports_when_everything_filtered():
+    """全被过滤时要说清楚，而不是返回一个空推荐让人以为"没货"。"""
+    q = QueryEntity(original_query="ブラウン シリーズ9 Pro", keywords=["ブラウン", "シリーズ9", "Pro"])
+    products = [
+        ProductEntity(id="a", title="ブラウン シリーズ9 Pro 替刃 92S", price=2299,
+                      condition="新品・未使用", url="https://jp.mercari.com/item/a"),
+    ]
+    tool = RecommendMercariTool(_FakeScraper(products), _FakeQueryParser(q), _FakeRecommendation())
+    data = (await tool.call(query="ブラウン シリーズ9 Pro")).data
+
+    assert data["count"] == 0
+    assert "配件" in data["note"]
+    assert data["excluded"]["by"] == {"accessory": 1}

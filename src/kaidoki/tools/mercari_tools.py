@@ -383,6 +383,8 @@ class RecommendMercariTool(BaseTool):
                 "运行完整的推荐流程:理解自然语言查询 → 抓取 Mercari 在售商品 → "
                 "LLM 按策略重排,一步返回一份现成的高性价比推荐(含推荐理由)。"
                 "适合直接、明确的'帮我找 X 的好货/性价比高的 X'类请求。"
+                "已内置配件/残缺品/异产品过滤（与 search_mercari 同一套词表），"
+                "返回的 filtered 字段交代抓了多少、留了多少、按什么剔除。"
                 "若需要比较多个商品、先查价格行情再判断、或多步精细控制,"
                 "请改用 search_mercari + get_price_statistics 组合。"
             ),
@@ -425,13 +427,45 @@ class RecommendMercariTool(BaseTool):
         max_results = max(1, min(int(max_results or 8), 20))
         parsed = await self.query_parser.parse(query)
         q = parsed.query
-        scraping = await self.scraper.scrape(q, max_products=max_results * 2)
+        # 多抓一些：过滤会砍掉一部分，抓 max_results*2 会导致重排样本太少
+        scraping = await self.scraper.scrape(q, max_products=max_results * 4)
         if not scraping.products:
             return ToolResult(
                 status=ToolStatus.SUCCESS,
                 data={"query": query, "count": 0, "note": "未抓到符合条件的在售商品"},
             )
-        rec = await self.recommendation.recommend(scraping.products, q, max_results, strategy)
+
+        # 这条固定流水线原先**绕过了所有过滤** —— 它是唯一没吃到配件/残缺品/异产品
+        # 过滤的入口。实测查 "パタゴニア レトロX フリース 中古 安い" 时它的 top1 是
+        # ¥3,000 的**童装**(12-18M)。过滤放在重排之前:别把 LLM 的重排预算浪费在配件上。
+        required = required_product_tokens(" ".join(getattr(q, "keywords", None) or []) or query)
+        kept, excluded_by = [], {}
+        for p in scraping.products:
+            title = p.title or ""
+            excl = classify_exclusion(title)
+            if excl is not None:
+                excluded_by[excl[0]] = excluded_by.get(excl[0], 0) + 1
+                continue
+            if not matches_product(title, required):
+                excluded_by["wrong_product"] = excluded_by.get("wrong_product", 0) + 1
+                continue
+            kept.append(p)
+
+        if not kept:
+            return ToolResult(
+                status=ToolStatus.SUCCESS,
+                data={
+                    "query": query,
+                    "count": 0,
+                    "note": (
+                        "抓到了商品，但全被判为配件/残缺品/异产品。"
+                        "可能是关键词太宽，或这个品类的标题写法不在词表里。"
+                    ),
+                    "excluded": {"count": len(scraping.products), "by": excluded_by},
+                },
+            )
+
+        rec = await self.recommendation.recommend(kept, q, max_results, strategy)
         return ToolResult(
             status=ToolStatus.SUCCESS,
             data={
@@ -442,6 +476,13 @@ class RecommendMercariTool(BaseTool):
                     "price_max": getattr(q, "price_max", None),
                     "condition": getattr(q, "condition", None),
                     "category": getattr(q, "category", None),
+                },
+                # 与其它工具一致地交代过滤情况（这条流水线以前是完全不过滤的）
+                "filtered": {
+                    "basis": "body_only",
+                    "scraped": len(scraping.products),
+                    "kept": len(kept),
+                    "excluded_by": excluded_by,
                 },
                 "strategy": rec.strategy_used,
                 "reasoning": getattr(rec, "reasoning", None),

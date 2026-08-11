@@ -234,6 +234,14 @@ def _warnings_for(row: Dict[str, Any]) -> List[str]:
     """给一行机型生成鲜度/可得性警告(让模型主动提示,而不是报个查不到的价)。"""
     out: List[str] = []
     age = _months_since(row.get("release"))
+    # 未発売:kakaku 会提前登记发售预定品并显示预约店铺数与价格。
+    # 实测 ドルツ EW-DA19 / EW-DA49(発売予定 2026-09)被当成"现在就能买"的选项推荐了 ——
+    # 旧实现只警告**旧**型号，完全没有"还没上市"这一档。
+    if age is not None and age < 0:
+        out.append(
+            f"**未発売**（発売予定 {row.get('release')}）—— 现在买不到，"
+            "显示的价格与店舗数是预约/预定信息，可能随上市变动"
+        )
     if age is not None and age >= _STALE_MONTHS:
         out.append(
             f"発売から約 {age // 12} 年（{row.get('release')}）的旧型号，"
@@ -334,9 +342,16 @@ class KakakuBackend:
     # ------------------------------------------------------------------ #
     @staticmethod
     def _select(
-        keyword: str, models: List[Dict[str, Any]]
+        keyword: str,
+        models: List[Dict[str, Any]],
+        identity_gate: bool = True,
     ) -> Tuple[Optional[Dict[str, Any]], List[Dict[str, Any]], str]:
-        """在目录机型里定位被搜机型。返回 (searched, ranked_candidates, confidence)。"""
+        """在目录机型里定位被搜机型。返回 (searched, ranked_candidates, confidence)。
+
+        identity_gate=False 用于"跟进目录页"的兜底路径:那个 K code 是 kakaku 自己
+        为这个关键词给出的，身份已由 kakaku 确认，再过一道闸只会误杀
+        （目录页标题 "SONY WF-1000XM5 (B) [ブラック]" 的 series 会被拆成 "SONY"）。
+        """
         toks = _tokens(keyword)
         if not toks or not models:
             return None, [], "none"
@@ -365,6 +380,19 @@ class KakakuBackend:
             s = row.get("series") or ""
             return 1 if any(p.search(s) for p in tail_pats) else 0
 
+        def series_hits(row: Dict[str, Any]) -> int:
+            """token 有多少命中在 **series** 上（而不是整个名称）。
+
+            `_split_name` 会把 `[...]` 后缀剥掉，所以这个信号能识破"关键词只出现在
+            方括号平台名里"的行:实测查 "Nintendo Switch 2" 时，
+            「スーパーマリオギャラクシー … [Nintendo Switch 2]」是**游戏软件** ¥6,666，
+            三个 token 全命中却一个都不在 series 上。
+            """
+            sr = (row.get("series") or "").lower()
+            return sum(
+                1 for t in toks if any(v.lower() in sr for v in _token_variants(t))
+            )
+
         def variant_match(row: Dict[str, Any]) -> int:
             """关键词要求了洗浄器付き(cc)/本体のみ(s) 时，同配置的机型优先。"""
             if want_cleaning is None or row.get("variant") is None:
@@ -380,6 +408,7 @@ class KakakuBackend:
             return (
                 model_hit(row),
                 series_exact(row),
+                min(series_hits(row), 1),  # 关键词得真的落在机型名上，不能只在 [平台名] 里
                 variant_match(row),        # 要洗浄器就别选本体のみ
                 hits(row),
                 row.get("release") or "",   # 発売日新者优先（"" 排最后）
@@ -388,6 +417,26 @@ class KakakuBackend:
 
         ranked = sorted(candidates, key=sort_key, reverse=True)
         best = ranked[0]
+
+        # 有实义的 token（非品牌、非纯数字）一个都没落在 series 上
+        # = 命中的是别的品类（软件/配件/周边）。报"查不到"远好于报一个 ¥6,666 的游戏
+        # 当 Switch 2 主机价。
+        # 必须排除纯数字 token:游戏名「スーパーマリオギャラクシー 2」里的 "2"
+        # 会让闸门失效 —— 实测就是这么漏过去的。
+        meaningful = [t for t in toks if t not in _BRAND_WORDS and not t.isdigit()]
+
+        def series_hits_meaningful(row: Dict[str, Any]) -> int:
+            sr = (row.get("series") or "").lower()
+            return sum(
+                1 for t in meaningful if any(v.lower() in sr for v in _token_variants(t))
+            )
+
+        if identity_gate and meaningful and series_hits_meaningful(best) == 0:
+            logger.info(
+                f"kakaku 命中的行看起来不是同类产品(series 未命中任何关键词): "
+                f"{best.get('name')!r} category={best.get('category')!r}"
+            )
+            return None, ranked, "none"
 
         if model_hit(best):
             confidence = "high"
@@ -505,6 +554,8 @@ class KakakuBackend:
             "name": row.get("name"),
             "series": row.get("series"),
             "model_no": row.get("model_no") or None,
+            "maker": row.get("maker"),
+            "category": row.get("category"),
             # 配置维度：with_cleaning_station(cc) / body_only(s) / None(不适用)。
             # 不同 variant 之间不可直接比价 —— 同系列差价可达 ¥8,000 以上。
             "variant": row.get("variant"),
@@ -515,6 +566,54 @@ class KakakuBackend:
         }
         out.update(extra)
         return out
+
+    async def _parse_item_page(self, kcode: str) -> Optional[Dict[str, Any]]:
+        """直接解析 kakaku 的**目录页** kakaku.com/item/<K>/。
+
+        为什么需要:某些关键词 kakaku 会返回"通販商品一覧"而不是目录一覧 ——
+        实测 `search.kakaku.com/WF-1000XM5/` 的 40 行里 0 个目录行，工具因此报"无数据"，
+        agent 只能自己估价(估了 ¥30,000，真实 ¥24,605，差 ¥5,400)。
+        但那些购物行里的 `/item/K.../` 链接指向的正是目录页，而目录页上
+        最安価格 / 発売日 / 取扱店舗数 全都有。跟进一次请求就能把失败变成正确答案。
+        """
+        url = f"https://kakaku.com/item/{kcode}/"
+        try:
+            text = await self._fetch_text(url)
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"kakaku 目录页取数失败 {url}: {e}")
+            return None
+        await asyncio.sleep(self.delay_seconds)  # 克制
+
+        flat = self._clean(text)
+        title = re.search(r"<title>(.*?)</title>", text, re.S)
+        name = None
+        if title:
+            # "SONY WF-1000XM5 (B) [ブラック] 価格比較 - 価格.com" → 去掉站点后缀
+            name = re.sub(r"\s*(価格比較|のクチコミ).*$", "", self._clean(title.group(1)))
+        if not name:
+            return None
+
+        price = re.search(r"最安価格[^\d]{0,12}([\d,]+)\s*円", flat)
+        rel = re.search(
+            r"(\d{4})\s*年\s*(\d{1,2})\s*月(?:\s*\d{1,2}\s*日)?\s*発売", flat
+        )
+        shops = re.search(r"([\d,]+)\s*店舗", flat)
+        series, model_no = _split_name(name)
+        return {
+            "kcode": kcode,
+            "name": name,
+            "lowest": int(price.group(1).replace(",", "")) if price else None,
+            "url": url,
+            "release": f"{rel.group(1)}-{int(rel.group(2)):02d}" if rel else None,
+            "shops": int(shops.group(1).replace(",", "")) if shops else None,
+            "maker": None,
+            "category": None,
+            "series": series,
+            "model_no": model_no,
+            "model_nos": _model_no_candidates(name),
+            "variant": None,
+            "family": _family_of(series),
+        }
 
     async def _search(self, keyword: str) -> Tuple[Optional[str], str]:
         """搜一次 kakaku，返回 (html|None, url)。失败只 warn，不抛。"""
@@ -540,11 +639,28 @@ class KakakuBackend:
                 logger.info(f"kakaku 无目录机型，降级重试: {keyword!r} → {core!r}")
                 text, url = await self._search(core)
                 models = self._parse_search(text) if text else []
+        # 页面上一个目录行都没有，但购物行里有 /item/K.../ 链接 →
+        # 跟进最常出现的那个 K，直接读目录页（见 _parse_item_page 的注释）。
+        item_page_fallback = False
+        if not models and text:
+            counts: Dict[str, int] = {}
+            for kc in re.findall(r"/item/(K\d+)/", text):
+                counts[kc] = counts.get(kc, 0) + 1
+            if counts:
+                kcode = max(counts, key=lambda k: counts[k])
+                logger.info(f"kakaku 搜索页无目录行，跟进目录页 {kcode}")
+                row = await self._parse_item_page(kcode)
+                if row and row.get("lowest"):
+                    models = [row]
+                    item_page_fallback = True
+
         if not models:  # 非目录商品(如 Bambu)——交给下一级 backend
             return None
 
         # 用**原始**关键词做选型:核心词用于检索，cc/洗浄器 这类意图仍要从原词里读
-        searched, ranked, confidence = self._select(keyword, models)
+        searched, ranked, confidence = self._select(
+            keyword, models, identity_gate=not item_page_fallback
+        )
         if searched is None:
             return None
 
@@ -587,7 +703,13 @@ class KakakuBackend:
                 "total_hits_reported": (
                     int(total_hits.group(1).replace(",", "")) if total_hits else None
                 ),
-                "note": "仅解析 kakaku 搜索结果第 1 页；排名靠后或未收录的机型可能未纳入比较",
+                "note": (
+                    "搜索页没有目录机型行，已跟进单个商品的目录页取数 —— "
+                    "因此**无法**比较同产品线的其它机型"
+                    if item_page_fallback else
+                    "仅解析 kakaku 搜索结果第 1 页；排名靠后或未收录的机型可能未纳入比较"
+                ),
+                "source_page": "item_page" if item_page_fallback else "search_page",
             },
             "currency": "JPY",
         }

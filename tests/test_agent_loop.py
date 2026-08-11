@@ -510,3 +510,52 @@ async def test_max_tokens_is_configurable_and_passed_through():
     agent = AgentService(llm, registry, max_tokens=4000)
     await agent.run("x")
     assert llm.calls[0]["max_tokens"] == 4000
+
+
+# --------------------------------------------------------------------------- #
+# 10) 无来源价格检查：prompt 规则管不住模型编价格，检查能让它可见
+# --------------------------------------------------------------------------- #
+async def test_flags_prices_absent_from_every_tool_result():
+    """实测两次:工具返回"无数据"后模型仍凭自有知识写了价格 ——
+    WF-1000XM5 估成 "¥30,000前後"（真实 ¥24,605）、Switch 2 直接写 "¥49,980"。"""
+    from kaidoki.application.services.agent_service import ungrounded_prices
+
+    trace = [
+        TraceStep(1, "get_new_and_newer_models", {"keyword": "Nintendo Switch 2"}, True, "s",
+                  result_full=json.dumps({"note": "未获取到新品/新型号数据"})),
+        TraceStep(1, "get_price_statistics", {"keyword": "Nintendo Switch 2"}, True, "s",
+                  result_full=json.dumps({"count": 3, "min": 41000, "median": 50000})),
+    ]
+    answer = "正規新品 ¥49,980、Mercari 中古は ¥41,000〜、中央値 ¥50,000。"
+    assert ungrounded_prices(answer, trace) == [49980]
+
+
+async def test_derived_numbers_are_not_flagged():
+    """"便宜了 ¥9,000" 是从工具数字算出来的，不该被当成无来源。"""
+    from kaidoki.application.services.agent_service import ungrounded_prices
+
+    trace = [TraceStep(1, "get_price_statistics", {}, True, "s",
+                       result_full=json.dumps({"min": 41000, "max": 50000}))]
+    assert ungrounded_prices("¥41,000 は ¥50,000 より ¥9,000 安い", trace) == []
+
+
+async def test_tool_prices_are_read_from_json_not_yen_regex():
+    """工具返回是 JSON，价格是裸数字（没有 ¥/円）。
+    若这一侧也用 ¥/円 正则，会一个都抓不到，然后把回答里每个数字都报成"无来源"。"""
+    from kaidoki.application.services.agent_service import ungrounded_prices
+
+    trace = [TraceStep(1, "get_new_and_newer_models", {}, True, "s",
+                       result_full=json.dumps({"searched_model": {"new_price_min": 24605}}))]
+    assert ungrounded_prices("kakaku 新品 ¥24,605", trace) == []
+
+
+async def test_grounding_result_is_surfaced_on_agent_result():
+    scraper = FakeScraperService(_products())
+    registry = build_mercari_tool_registry(scraper)
+    llm = FakeLLM([
+        _assistant_tool_call("c1", "search_mercari", '{"keyword": "AirPods Pro"}'),
+        _assistant_final("定価は ¥99,999 です。"),
+    ])
+    result = await AgentService(llm, registry).run("AirPods Pro")
+    assert 99999 in result.ungrounded_prices
+    assert 99999 in result.to_dict()["ungrounded_prices"]

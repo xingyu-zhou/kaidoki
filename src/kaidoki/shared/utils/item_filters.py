@@ -182,35 +182,54 @@ def prompt_category_lines() -> str:
 # 放在 shared 而不是某个 tool 里：kakaku 选型、Mercari 本体行情统计、Google 对照基线
 # 三处都要用同一套。写三份的结果是三份慢慢漂，然后同一个型号被判成不同型号。
 # 罗马字 → 日文（kakaku 的机型名多为片假名/汉字，纯英文 token 直接匹配会全废）。
-# 只收常见电子/家电品牌；没收录的品牌退化为原样匹配，不会更差。
-_BRAND_ALIASES: Dict[str, str] = {
-    "braun": "ブラウン",
-    "panasonic": "パナソニック",
-    "philips": "フィリップス",
-    "sony": "ソニー",
-    "apple": "アップル",
-    "sharp": "シャープ",
-    "toshiba": "東芝",
-    "hitachi": "日立",
-    "dyson": "ダイソン",
-    "anker": "アンカー",
-    "bose": "ボーズ",
-    "epson": "エプソン",
-    "canon": "キヤノン",
-    "nikon": "ニコン",
-    "fujifilm": "富士フイルム",
-    "sanyo": "サンヨー",
-    "mitsubishi": "三菱",
-    "balmuda": "バルミューダ",
-    "shark": "シャーク",
-    "irobot": "アイロボット",
-    "logicool": "ロジクール",
-    "logitech": "ロジクール",
-    "razer": "レイザー",
-    "samsung": "サムスン",
-    "xiaomi": "シャオミ",
+# 一个罗马字可能对应多种日文写法（nintendo → 任天堂 / ニンテンドー），所以值是列表。
+# 没收录的品牌退化为原样匹配，不会更差 —— 但会漏:实测查 "パタゴニア レトロX" 时
+# 80 条样本被剔了 61 条 wrong_product，因为挂牌标题写的是罗马字 "Patagonia"。
+_BRAND_ALIASES: Dict[str, List[str]] = {
+    "braun": ["ブラウン"],
+    "panasonic": ["パナソニック"],
+    "philips": ["フィリップス"],
+    "sony": ["ソニー"],
+    "apple": ["アップル"],
+    "sharp": ["シャープ"],
+    "toshiba": ["東芝"],
+    "hitachi": ["日立"],
+    "dyson": ["ダイソン"],
+    "anker": ["アンカー"],
+    "bose": ["ボーズ"],
+    "epson": ["エプソン"],
+    "canon": ["キヤノン"],
+    "nikon": ["ニコン"],
+    "fujifilm": ["富士フイルム", "フジフイルム"],
+    "olympus": ["オリンパス"],
+    "sigma": ["シグマ"],
+    "tamron": ["タムロン"],
+    "sanyo": ["サンヨー"],
+    "mitsubishi": ["三菱"],
+    "balmuda": ["バルミューダ"],
+    "shark": ["シャーク"],
+    "irobot": ["アイロボット"],
+    "logicool": ["ロジクール"],
+    "logitech": ["ロジクール"],
+    "razer": ["レイザー"],
+    "samsung": ["サムスン"],
+    "xiaomi": ["シャオミ"],
+    "nintendo": ["任天堂", "ニンテンドー"],
+    "patagonia": ["パタゴニア"],
+    "montbell": ["モンベル"],
+    "northface": ["ノースフェイス"],
+    "adidas": ["アディダス"],
+    "nike": ["ナイキ"],
+    "asics": ["アシックス"],
+    "seiko": ["セイコー"],
+    "citizen": ["シチズン"],
+    "casio": ["カシオ"],
+    "jbl": ["ジェイビーエル"],
+    "sennheiser": ["ゼンハイザー"],
+    "iodata": ["アイオーデータ"],
+    "buffalo": ["バッファロー"],
 }
-_BRAND_WORDS = set(_BRAND_ALIASES) | set(_BRAND_ALIASES.values())
+_BRAND_WORDS = set(_BRAND_ALIASES) | {ja for forms in _BRAND_ALIASES.values() for ja in forms}
 
 
 def _tokens(keyword: str) -> List[str]:
@@ -230,15 +249,15 @@ def _tokens(keyword: str) -> List[str]:
 
 
 def _token_variants(token: str) -> List[str]:
-    """一个 token 的可匹配写法(原样 + 品牌罗马字↔日文互换)。"""
+    """一个 token 的可匹配写法(原样 + 品牌罗马字↔日文双向互换)。"""
     variants = [token]
-    alias = _BRAND_ALIASES.get(token)
-    if alias:
-        variants.append(alias)
-    else:
-        for latin, ja in _BRAND_ALIASES.items():
-            if token == ja:
+    for ja in _BRAND_ALIASES.get(token, []):
+        variants.append(ja)
+    if len(variants) == 1:  # 反向:日文 → 罗马字（及该品牌的其它日文写法）
+        for latin, forms in _BRAND_ALIASES.items():
+            if token in forms:
                 variants.append(latin)
+                variants.extend(f for f in forms if f != token)
                 break
     return variants
 
@@ -272,12 +291,19 @@ def matches_product(title: str, required: List[str]) -> bool:
     if not required:
         return True
     t = (title or "").lower()
+    # **标题必须用和 token 相同的规则归一化**。否则 "WF-1000XM5"(标题带连字符)
+    # 永远匹配不上 token "wf1000xm5" —— 实测这让 get_price_statistics 对整个
+    # 耳机品类静默返回 count=0。保留空格，避免相邻 token 粘连出假匹配。
+    t_norm = re.sub(r"[^0-9a-z+぀-ヿ一-鿿\s]", "", t)
     for tok in required:
-        if any(v.lower() in t for v in _token_variants(tok)):
+        if any(v.lower() in t or v.lower() in t_norm for v in _token_variants(tok)):
             continue
-        digits = re.sub(r"\D", "", tok)
-        if digits and digits in t:
-            continue
+        # 数字兜底**只给含日文的系列词**（"シリーズ9" 由 "S9 Pro" 里的 9 满足）。
+        # 给型番用会造成假阳性:"ES-LV9V" → 数字 "9" 能匹配任何含 9 的标题。
+        if re.search(r"[぀-ヿ一-鿿]", tok):
+            digits = re.sub(r"\D", "", tok)
+            if digits and digits in t_norm:
+                continue
         return False
     return True
 

@@ -349,6 +349,13 @@ def agent(query, max_iterations, trace_file, result_chars, google_benchmark):
             click.echo(f"\n迭代轮数: {result.iterations}"
                        f"{'（达到上限，已强制收尾）' if result.truncated else ''}")
 
+            # 无来源的价格：prompt 规则管不住模型编价格，这道检查能让它可见
+            if result.ungrounded_prices:
+                click.echo("\n⚠️  回答里有工具返回中查不到的金额（可能是模型自有知识）:")
+                for p in result.ungrounded_prices:
+                    click.echo(f"     ¥{p:,}")
+                click.echo("     → 这些数字没有来源，使用前请自行核对")
+
             if trace_file:
                 payload = result.to_dict()
                 payload["query"] = query

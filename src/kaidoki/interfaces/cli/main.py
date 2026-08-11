@@ -282,9 +282,10 @@ def scrape(query, max_products):
                    '完整对话）写成 JSON，用于事后复盘和改 prompt')
 @click.option('--result-chars', default=1200, show_default=True,
               help='终端上每次工具返回打印多少字符（完整内容用 --trace-file 落盘）')
-@click.option('--google-benchmark/--no-google-benchmark', default=True, show_default=True,
+@click.option('--google-benchmark/--no-google-benchmark', default=False, show_default=True,
               help='跑完后额外记一份 Google 检索结果作对照基线（只用于打分，不进 agent 的输入）。'
-                   '未配置 GOOGLE_API_KEY / GOOGLE_CSE_ID 时自动跳过')
+                   '**默认关闭**：Custom Search API 侧还没跑通，且核心比较语义仍在打磨中，'
+                   '先不让一个未验证的记分板产生误导性的战绩。需要时显式加此 flag')
 def agent(query, max_iterations, trace_file, result_chars, google_benchmark):
     """原生工具调用 agent：LLM 自主决定调用哪些工具（与写死的 search 流水线并存）"""
     async def _agent():

@@ -58,6 +58,14 @@ import httpx
 
 from .framework.base_tool import BaseTool, ToolResult, ToolStatus
 from ..infrastructure.scraping.lineup_finder import LineupFinder
+# 品牌别名 / 分词 / 型番归一化 放在 shared —— kakaku 选型、Mercari 本体行情统计、
+# Google 对照基线三处都要用同一套，写三份会慢慢漂。
+from ..shared.utils.item_filters import (
+    _BRAND_WORDS,
+    _norm_model_no,
+    _token_variants,
+    _tokens,
+)
 from ..shared.utils.logger_utils import get_logger
 
 logger = get_logger(__name__)
@@ -74,36 +82,6 @@ _NO_DATA_NOTE = "未获取到新品/新型号数据"
 _STALE_MONTHS = 24
 _FEW_SHOPS = 3
 
-# 罗马字 → 日文（kakaku 的机型名多为片假名/汉字，纯英文 token 直接匹配会全废）。
-# 只收常见电子/家电品牌；没收录的品牌退化为原样匹配，不会更差。
-_BRAND_ALIASES: Dict[str, str] = {
-    "braun": "ブラウン",
-    "panasonic": "パナソニック",
-    "philips": "フィリップス",
-    "sony": "ソニー",
-    "apple": "アップル",
-    "sharp": "シャープ",
-    "toshiba": "東芝",
-    "hitachi": "日立",
-    "dyson": "ダイソン",
-    "anker": "アンカー",
-    "bose": "ボーズ",
-    "epson": "エプソン",
-    "canon": "キヤノン",
-    "nikon": "ニコン",
-    "fujifilm": "富士フイルム",
-    "sanyo": "サンヨー",
-    "mitsubishi": "三菱",
-    "balmuda": "バルミューダ",
-    "shark": "シャーク",
-    "irobot": "アイロボット",
-    "logicool": "ロジクール",
-    "logitech": "ロジクール",
-    "razer": "レイザー",
-    "samsung": "サムスン",
-    "xiaomi": "シャオミ",
-}
-_BRAND_WORDS = set(_BRAND_ALIASES) | set(_BRAND_ALIASES.values())
 
 # 产品线尾部的等级词（Pro / Pro+ / Sport+ / Max ...）：归并 family 时剥掉，
 # 使 "シリーズ9 Pro" 与 "シリーズ9 Pro+" 归到同一 family "ブラウン シリーズ9"。
@@ -125,41 +103,6 @@ _CATALOG_MARKER = re.compile(r'class="p-item_(?:shopCounts|date|maker)')
 # 型番形状:同时含数字与 ASCII 字母、且整体由 ascii 字母数字与 -/ 组成。
 # "シリーズ9"(片假名+数字)与 "Pro"(无数字)都不算。
 _MODEL_TOKEN = re.compile(r"^(?=.*\d)(?=.*[A-Za-z])[0-9A-Za-z][0-9A-Za-z\-/]*$")
-
-
-def _tokens(keyword: str) -> List[str]:
-    """把关键词切成有意义的小写 token(长度>=2 或纯数字,去标点)。
-
-    **保留 `+`**:在 Braun 的命名里 "Pro" 与 "Pro+" 是不同世代。旧实现把 `+` 当标点删掉，
-    于是查 "シリーズ9 Pro+" 会命中 "シリーズ9 Pro"（实测选出了 2022 年的 Pro 9450cc-V，
-    而用户要的是 2025 年的 Pro+）。
-    """
-    raw = re.split(r"\s+", (keyword or "").strip().lower())
-    out: List[str] = []
-    for t in raw:
-        t = re.sub(r"[^0-9a-z+぀-ヿ一-鿿]", "", t)
-        if len(t) >= 2 or t.isdigit():
-            out.append(t)
-    return out
-
-
-def _token_variants(token: str) -> List[str]:
-    """一个 token 的可匹配写法(原样 + 品牌罗马字↔日文互换)。"""
-    variants = [token]
-    alias = _BRAND_ALIASES.get(token)
-    if alias:
-        variants.append(alias)
-    else:
-        for latin, ja in _BRAND_ALIASES.items():
-            if token == ja:
-                variants.append(latin)
-                break
-    return variants
-
-
-def _norm_model_no(text: str) -> str:
-    """型番归一化:只留 ascii 字母数字并小写(9435s-V → 9435sv)。"""
-    return re.sub(r"[^0-9a-z]", "", (text or "").lower())
 
 
 def _split_name(name: str) -> Tuple[str, str]:
@@ -628,6 +571,16 @@ class KakakuBackend:
             ],
             "newer_lookup": newer_lookup,
             "newer_lookup_reason": reason,
+            # 「最安値」不等于「实际支付额」。这个前提写进数据契约，而不是只写在 prompt 里 ——
+            # 实测 Braun 有「本体+替刃 同時購入で ¥3,500 キャッシュバック」(占 ¥43,960 的 8%)；
+            # 楽天ポイント最高 50% 还元而 kakaku 完全不计入点数；
+            # D850 在 2025 春也有过 ¥50,000 キャッシュバック。
+            # 任何"便宜了多少"的结论，不带这个前提就是错的。
+            "price_basis": "cash_lowest_excl_campaigns",
+            "price_basis_note": (
+                "现金最安値，未计入メーカーキャッシュバック与ポイント还元;"
+                "实际支付可能更低,购买前需查当期活动"
+            ),
             "search_url": url,
             "coverage": {
                 "catalog_models_parsed": len(models),

@@ -464,6 +464,17 @@ async def test_single_family_unknown_still_reports_newer_related_models():
     assert "KLP" not in res["newer_lookup_reason"]
 
 
+@pytest.mark.asyncio
+async def test_price_basis_is_stated_in_the_data_contract():
+    """「最安値」≠「实际支付额」。这个前提必须写进数据契约，不能只写在 prompt 里 ——
+    实测 Braun 有 ¥3,500 的本体+替刃キャッシュバック(占 ¥43,960 的 8%)，
+    楽天ポイント最高 50% 还元而 kakaku 完全不计入。任何"便宜了多少"不带这个前提就是错的。"""
+    res = await _CannedKakaku(_PLUS_HTML).lookup("ブラウン シリーズ9 Pro+")
+    assert res["price_basis"] == "cash_lowest_excl_campaigns"
+    assert "キャッシュバック" in res["price_basis_note"]
+    assert "ポイント" in res["price_basis_note"]
+
+
 def test_model_no_candidates_finds_leading_model_number():
     from kaidoki.tools.model_compare import _model_no_candidates
 

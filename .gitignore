@@ -43,3 +43,6 @@ tmp/
 
 # ---- Backups (pre-restart snapshots kept in git history instead) ----
 backups/
+
+# ---- Google 对照基线记录（含检索词与完整 Google 结果；仓库 URL 是公开的）----
+benchmarks/

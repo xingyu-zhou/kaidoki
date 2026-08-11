@@ -21,7 +21,7 @@ Author: Kaidoki Team (google benchmark)
 """
 
 import re
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 # 不是这个产品:耗材 / 替换件 / 周边
 ACCESSORY_KEYWORDS: List[str] = [
@@ -46,11 +46,7 @@ ACCESSORY_KEYWORDS: List[str] = [
     "2個セット",
     "3個セット",
     "4個セット",
-    "フィルム",
     "イヤーピース",
-    "スキンシール",
-    "ステッカー",
-    "ストラップ",
     # 只做保护壳的品牌。实测 "casetify ナルト Akatsuki AirPods pro 2 暁" 这类标题
     # 里根本不出现「ケース」，只能靠品牌名识别。
     "casetify",
@@ -59,12 +55,38 @@ ACCESSORY_KEYWORDS: List[str] = [
     "bottega",
 ]
 
+# 表示"这条挂牌里有主机"的词。用于下面的条件排除。
+_MAIN_UNIT_WORDS = ["本体", "ボディ", "body"]
+
+# 搭售标记:配件名后面跟这些字 = "附带该配件"，主体不是配件本身。
+# 实测 "Nikon D850 … ショット約38万 動作確認済 純正ストラップ付" ¥139,800 是一台真相机，
+# 标题里没有「本体」，只靠「ストラップ付」的「付」才能和「純正カメラストラップ」区分开。
+_BUNDLE_SUFFIXES = ["付", "込", "同梱", "おまけ", "あり", "セット済"]
+
+
+def _bundled_forms(word: str) -> List[str]:
+    """「ストラップ」→「ストラップ付」「ストラップ込」… (「付き」被「付」覆盖)"""
+    return [word + suffix for suffix in _BUNDLE_SUFFIXES]
+
 # 条件排除:命中 kw 但标题里同时出现任一 exception 时**不**排除。
-# 「ケース」必须这样处理 —— "AirPods Pro 2 MagSafe充電ケース(USB-C)付き" 是**商品正式名**，
-# 而 "airpods pro ケース Bottega" 是保护壳。裸匹配会误杀真商品，不匹配会放进配件。
+#
+# 两类都必须这样处理，否则会**误杀真商品** —— 而误杀比漏过一个配件危险得多，
+# 它会静默丢掉真正的便宜货:
+#
+# 1. 配件名出现在商品正式名里:"AirPods Pro 2 MagSafe充電ケース(USB-C)付き" 是**正式名**，
+#    而 "airpods pro ケース Bottega" 是保护壳。
+# 2. **本体+配件的搭售**:实测 "Nikon D850 デジタル一眼レフカメラ 本体 NPSストラップ"
+#    ¥125,000 是一台真相机(而且正是 agent 推荐的那台)，只因标题含「ストラップ」被剔掉。
+#    这类只要标题里有 本体/ボディ 就不能当配件。
 CONDITIONAL_ACCESSORY: List[Tuple[str, List[str]]] = [
-    ("ケース", ["充電ケース", "ケース付", "充電器付", "ケース欠品"]),
-    ("カバー", ["カバー付"]),
+    ("ケース", ["充電ケース", "充電器付", "ケース欠品"] + _bundled_forms("ケース")),
+    ("カバー", _bundled_forms("カバー")),
+    ("ストラップ", _MAIN_UNIT_WORDS + _bundled_forms("ストラップ")),
+    ("フィルム", _MAIN_UNIT_WORDS + _bundled_forms("フィルム")),
+    ("ステッカー", _MAIN_UNIT_WORDS + _bundled_forms("ステッカー")),
+    ("スキンシール", _MAIN_UNIT_WORDS + _bundled_forms("スキンシール")),
+    ("充電スタンド", _MAIN_UNIT_WORDS + _bundled_forms("充電スタンド")),
+    ("充電ケーブル", _MAIN_UNIT_WORDS + _bundled_forms("充電ケーブル")),
 ]
 
 # 是这个产品但不完整 / 不可用
@@ -152,6 +174,112 @@ def prompt_category_lines() -> str:
         f"  - 个人护理用品(只买新品):{' / '.join(NEW_ONLY_KEYWORDS[:12])} 等;\n"
         f"  - 需要先提示卫生顾虑、由用户决定:{' / '.join(JUDGEMENT_CALL_KEYWORDS)}。"
     )
+
+
+# --------------------------------------------------------------------------- #
+# 商品文本的共享词汇：品牌别名 / 分词 / 型番归一化 / 产品身份判定
+# --------------------------------------------------------------------------- #
+# 放在 shared 而不是某个 tool 里：kakaku 选型、Mercari 本体行情统计、Google 对照基线
+# 三处都要用同一套。写三份的结果是三份慢慢漂，然后同一个型号被判成不同型号。
+# 罗马字 → 日文（kakaku 的机型名多为片假名/汉字，纯英文 token 直接匹配会全废）。
+# 只收常见电子/家电品牌；没收录的品牌退化为原样匹配，不会更差。
+_BRAND_ALIASES: Dict[str, str] = {
+    "braun": "ブラウン",
+    "panasonic": "パナソニック",
+    "philips": "フィリップス",
+    "sony": "ソニー",
+    "apple": "アップル",
+    "sharp": "シャープ",
+    "toshiba": "東芝",
+    "hitachi": "日立",
+    "dyson": "ダイソン",
+    "anker": "アンカー",
+    "bose": "ボーズ",
+    "epson": "エプソン",
+    "canon": "キヤノン",
+    "nikon": "ニコン",
+    "fujifilm": "富士フイルム",
+    "sanyo": "サンヨー",
+    "mitsubishi": "三菱",
+    "balmuda": "バルミューダ",
+    "shark": "シャーク",
+    "irobot": "アイロボット",
+    "logicool": "ロジクール",
+    "logitech": "ロジクール",
+    "razer": "レイザー",
+    "samsung": "サムスン",
+    "xiaomi": "シャオミ",
+}
+_BRAND_WORDS = set(_BRAND_ALIASES) | set(_BRAND_ALIASES.values())
+
+
+def _tokens(keyword: str) -> List[str]:
+    """把关键词切成有意义的小写 token(长度>=2 或纯数字,去标点)。
+
+    **保留 `+`**:在 Braun 的命名里 "Pro" 与 "Pro+" 是不同世代。旧实现把 `+` 当标点删掉，
+    于是查 "シリーズ9 Pro+" 会命中 "シリーズ9 Pro"（实测选出了 2022 年的 Pro 9450cc-V，
+    而用户要的是 2025 年的 Pro+）。
+    """
+    raw = re.split(r"\s+", (keyword or "").strip().lower())
+    out: List[str] = []
+    for t in raw:
+        t = re.sub(r"[^0-9a-z+぀-ヿ一-鿿]", "", t)
+        if len(t) >= 2 or t.isdigit():
+            out.append(t)
+    return out
+
+
+def _token_variants(token: str) -> List[str]:
+    """一个 token 的可匹配写法(原样 + 品牌罗马字↔日文互换)。"""
+    variants = [token]
+    alias = _BRAND_ALIASES.get(token)
+    if alias:
+        variants.append(alias)
+    else:
+        for latin, ja in _BRAND_ALIASES.items():
+            if token == ja:
+                variants.append(latin)
+                break
+    return variants
+
+
+def _norm_model_no(text: str) -> str:
+    """型番归一化:只留 ascii 字母数字并小写(9435s-V → 9435sv)。"""
+    return re.sub(r"[^0-9a-z]", "", (text or "").lower())
+
+
+def required_product_tokens(keyword: Optional[str]) -> List[str]:
+    """关键词 → 必须出现在标题里的 token（用于判断"这条到底是不是同一个产品"）。
+
+    配件词表管不了"不同产品":实测 Mercari 里 "AirPods (第2世代) 早い者勝ち‼️" ¥18,888
+    既不是配件也不是残缺品，但它是 **AirPods 2 而不是 AirPods Pro 2**，
+    混进来就会把"最低价"拉低一万多。
+
+    **必须用简短干净的关键词**（agent 自己搜的那个），不要用 kakaku 的目录标题 ——
+    实测 "Apple アップル 純正 AirPods Pro 第2世代 USB-C エアポッズプロ2 … ラッピング可"
+    会产出 12 个 token，任何正常挂牌都匹配不全，把所有商品都误杀。
+    """
+    return _tokens(keyword) if keyword else []
+
+
+def matches_product(title: str, required: List[str]) -> bool:
+    """标题是否覆盖了全部必需 token。
+
+    两条宽松处理，避免误杀真商品:
+    - 品牌罗马字↔片假名互通("Braun シリーズ9 Pro+ …" 里没有「ブラウン」也算命中);
+    - 含数字的 token 允许只匹配数字("シリーズ9" 由 "S9 Pro" 里的 9 满足)。
+    """
+    if not required:
+        return True
+    t = (title or "").lower()
+    for tok in required:
+        if any(v.lower() in t for v in _token_variants(tok)):
+            continue
+        digits = re.sub(r"\D", "", tok)
+        if digits and digits in t:
+            continue
+        return False
+    return True
 
 
 def classify_exclusion(title: str) -> Optional[Tuple[str, str]]:

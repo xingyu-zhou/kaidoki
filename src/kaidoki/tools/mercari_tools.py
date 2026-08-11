@@ -19,6 +19,11 @@ from typing import Any, Dict, List, Optional, Tuple
 from .framework.base_tool import BaseTool, ToolResult, ToolStatus
 from ..domain.entities.query import QueryEntity
 from ..infrastructure.scraping.scraper_service import ScraperService
+from ..shared.utils.item_filters import (
+    classify_exclusion,
+    matches_product,
+    required_product_tokens,
+)
 from ..shared.utils.logger_utils import get_logger
 
 logger = get_logger(__name__)
@@ -207,9 +212,14 @@ class PriceStatisticsTool(BaseTool):
         super().__init__(
             name="get_price_statistics",
             description=(
-                "抓取某关键词在 Mercari 的一批在售商品并计算价格统计"
-                "（count/min/max/median/average），用于判断某个价格是否划算、"
-                "行情大致在什么区间。不返回具体商品，只返回统计数字。"
+                "抓取某关键词在 Mercari 的一批在售商品并计算**本体**价格统计"
+                "（count/min/max/median/average），用于判断某个价格是否划算。"
+                "会自动剔除配件（替刃/ケース/保護フィルム…）、残缺品（刃無し/片耳…）"
+                "和不同产品（如查 AirPods Pro 时混进来的 AirPods），"
+                "并回报剔除了多少条、按什么规则（excluded 字段）。"
+                "**强烈建议同时传 price_min**（例如 kakaku 新品最安値的 30~40%）——"
+                "关键词永远挡不住所有配件，价格下限是第二道闸。"
+                "unfiltered 字段保留未过滤的原始统计，便于对照。"
             ),
         )
         self.scraper = scraper_service
@@ -233,6 +243,15 @@ class PriceStatisticsTool(BaseTool):
                             "想知道『全新未使用品的行情』传 [\"新品・未使用\"]。"
                         ),
                     },
+                    "price_min": {
+                        "type": "integer",
+                        "description": (
+                            "价格下限（日元），可选但**强烈建议给**。"
+                            "关键词永远挡不住所有配件 —— 实测 'ニコン D850' 不给下限时"
+                            "中位数只有 ¥5,000（样本里全是镜头盖/保护膜/书籍）。"
+                            "取 kakaku 新品最安値的 30~40% 是个安全值。"
+                        ),
+                    },
                 },
                 "required": ["keyword"],
             }
@@ -242,27 +261,94 @@ class PriceStatisticsTool(BaseTool):
         self,
         keyword: str,
         condition: Any = None,
+        price_min: Optional[int] = None,
         **kwargs,  # 吸收模型可能给出的多余/幻觉参数
     ) -> ToolResult:
         conditions, invalid = _normalize_conditions(condition)
         if invalid:
             return _invalid_condition_result(invalid)
-        query = _build_query(keyword, conditions=conditions)
+        query = _build_query(keyword, price_min=price_min, conditions=conditions)
         result = await self.scraper.scrape(query, max_products=self.sample_size)
 
-        prices = sorted(
-            p.price
-            for p in result.products
+        on_sale = [
+            p for p in result.products
             if p.price and p.price > 0 and not getattr(p, "sold", False)
+        ]
+        # 未过滤的原始统计一并留着 —— 让模型能看出过滤起了多大作用，
+        # 也让"过滤是不是过头了"这件事查得出来。
+        raw_prices = sorted(p.price for p in on_sale)
+
+        # 三层过滤：配件/残缺词表 → 产品身份 token → 价格下限。
+        # 关键词行情对"本体贵不贵"没有参考价值（D850 中位数 ¥5,000 vs 本体十几万）。
+        required = required_product_tokens(keyword)
+        kept: List[Any] = []
+        excluded_by: Dict[str, int] = {}
+        samples: Dict[str, str] = {}
+
+        def drop(reason: str, product) -> None:
+            excluded_by[reason] = excluded_by.get(reason, 0) + 1
+            samples.setdefault(reason, f"¥{product.price} {(product.title or '')[:34]}")
+
+        for p in on_sale:
+            title = p.title or ""
+            excl = classify_exclusion(title)
+            if excl is not None:
+                drop(excl[0], p)
+                continue
+            if not matches_product(title, required):
+                drop("wrong_product", p)
+                continue
+            if price_min is not None and p.price < int(price_min):
+                drop("below_price_min", p)
+                continue
+            kept.append(p)
+
+        prices = sorted(p.price for p in kept)
+        excluded = {
+            "count": len(on_sale) - len(kept),
+            "by": excluded_by,
+            "examples": samples,
+        }
+
+        # 没给 price_min 时，词表挡不住的杂物会把中位数压到毫无意义的水平
+        # （实测 D850 过滤后 median 仍只有 ¥1,000，而本体在十几万）。
+        # 用 max/median 比值检测这种双峰分布，直接把"该重查"说出来。
+        warnings: List[str] = []
+        if prices and price_min is None:
+            median = statistics.median(prices)
+            if median > 0 and prices[-1] / median >= 10:
+                warnings.append(
+                    f"样本疑似混着配件与本体（最高价 ¥{prices[-1]:,} 是中位数 "
+                    f"¥{int(median):,} 的 {int(prices[-1] / median)} 倍）。"
+                    "这个中位数不能代表本体行情 —— 请给 price_min"
+                    "（例如 kakaku 新品最安値的 30~40%）后重查。"
+                )
+        unfiltered = (
+            {
+                "count": len(raw_prices),
+                "min": raw_prices[0],
+                "max": raw_prices[-1],
+                "median": int(statistics.median(raw_prices)),
+            }
+            if raw_prices else {"count": 0}
         )
+
         if not prices:
             return ToolResult(
                 status=ToolStatus.SUCCESS,
                 data={
                     "keyword": keyword,
                     "condition_filter": conditions or None,
+                    "price_min": price_min,
+                    "basis": "body_only",
                     "count": 0,
-                    "note": "未抓到带价格的在售商品",
+                    "note": (
+                        "过滤后没有剩下可用于本体行情的商品。"
+                        "可能是关键词太宽（全是配件）或 price_min 定得太高。"
+                        if raw_prices else "未抓到带价格的在售商品"
+                    ),
+                    "excluded": excluded,
+                    "unfiltered": unfiltered,
                 },
             )
 
@@ -271,6 +357,12 @@ class PriceStatisticsTool(BaseTool):
             data={
                 "keyword": keyword,
                 "condition_filter": conditions or None,
+                "price_min": price_min,
+                # 明确声明这是**本体**行情，不是关键词行情
+                "basis": "body_only",
+                "warnings": warnings,
+                "excluded": excluded,
+                "unfiltered": unfiltered,
                 "count": len(prices),
                 "min": prices[0],
                 "max": prices[-1],

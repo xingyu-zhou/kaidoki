@@ -33,14 +33,11 @@ from ...shared.utils.item_filters import (
     ambiguous_flags,
     classify_exclusion,
     looks_like_body,
+    matches_product,
+    required_product_tokens,
 )
 from ...shared.utils.logger_utils import get_logger
-from ...tools.model_compare import (
-    normalize_model_no,
-    split_model_name,
-    token_variants,
-    tokens_of,
-)
+from ...tools.model_compare import normalize_model_no, split_model_name
 
 logger = get_logger(__name__)
 
@@ -267,36 +264,6 @@ def product_keyword(trace: List[Any]) -> Optional[str]:
     if not fair:
         return None
     return re.sub(r"\s*最安値\s*$", "", fair).strip() or None
-
-
-def required_product_tokens(keyword: Optional[str]) -> List[str]:
-    """关键词 → 必须出现在标题里的 token。
-
-    配件词表管不了"不同产品":实测 Mercari 里 "AirPods (第2世代) 早い者勝ち‼️" ¥18,888
-    既不是配件也不是残缺品，但它是 **AirPods 2 而不是 AirPods Pro 2**，
-    混进来就会刷出假的最低价（它比真品便宜一万多）。
-    """
-    return tokens_of(keyword) if keyword else []
-
-
-def matches_product(title: str, required: List[str]) -> bool:
-    """标题是否覆盖了全部系列 token。
-
-    两条宽松处理，避免误杀真商品:
-    - 品牌罗马字↔片假名互通("Braun シリーズ9 Pro+ …" 里没有「ブラウン」也算命中);
-    - 含数字的 token 允许只匹配数字("シリーズ9" 由 "S9 Pro" 里的 9 满足)。
-    """
-    if not required:
-        return True
-    t = (title or "").lower()
-    for tok in required:
-        if any(v.lower() in t for v in token_variants(tok)):
-            continue
-        digits = re.sub(r"\D", "", tok)
-        if digits and digits in t:
-            continue
-        return False
-    return True
 
 
 def comparability(

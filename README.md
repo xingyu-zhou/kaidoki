@@ -18,10 +18,15 @@
 - `search_mercari` — 按关键词/价格/成色搜 Mercari 在售商品(id/标题/价/成色/链接)。成色可多选;
   **「新品・未使用」= 全新未拆封** —— Mercari 不只有二手,"只买新品"也要搜这一档(常比 kakaku 便宜)。
 - `get_price_statistics` — 抓一批算 count/min/max/median/average,判断"贵不贵、是不是好价"。
+  返回的是**本体行情**(`basis: body_only`):自动剔除配件/残缺品/不同产品,并回报 `excluded`
+  (剔了多少条、按什么规则、每类一条样本)与 `unfiltered`(未过滤原始统计,用于对照)。
+  建议同时给 `price_min` —— 实测 "ニコン D850" 不给下限时中位数只有 ¥5,000(一台十几万的相机)。
 - `recommend_deals` — 把整条固定流水线(解析→抓取→重排)包成一步,直接出成品推荐。
 - `get_new_and_newer_models` — **查新品最低价 + 发现同产品线的更新型号及其价格**(实时数据,不靠模型记忆)。
-  每个机型带 `url / release(発売日) / shops(在售店舗数)`,外加 `confidence`(选型置信度)、
-  `candidates`(关键词笼统时的其它候选)、`newer_lookup`(`ok`=真比较过発売日 / `unknown`=数据不足)。
+  每个机型带 `url / release(発売日) / shops(在售店舗数) / variant(cc=洗浄器付き / s=本体のみ)`,
+  外加 `confidence`(选型置信度)、`candidates`(关键词笼统时的其它候选)、
+  `newer_lookup`(`ok`=真比较过発売日 / `unknown`=数据不足)、
+  `price_basis`(=`cash_lowest_excl_campaigns`,**现金最安値,不含キャッシュバック与ポイント还元**)。
 
 ## 架构(实际跑通的路径)
 
@@ -85,7 +90,7 @@ uv run kaidoki config                                        # 查看配置
 `--output-format {markdown_table|detailed_report|simple_list|json_export}`、`--language {zh|ja|en}`。
 `agent` 选项:`--max-iterations N`、`--result-chars N`(终端上每次工具返回打印多少字符)、
 `--trace-file PATH`(把**完整过程**写成 JSON:system prompt / 每轮模型推理 / 每次工具调用的完整入参与返回 / 完整对话)、
-`--no-google-benchmark`(关掉 Google 对照)。
+`--google-benchmark`(开启 Google 对照基线,**默认关闭**)。
 `--trace-file` 是复盘工具:结论错了先看它,能区分"工具取错数"和"模型误读数据"。
 
 ## Google 对照基线(记分板)——**当前默认关闭**
@@ -127,8 +132,8 @@ Braun 那次便宜的是新三年的 Pro+(该买),AirPods 那次便宜的反而�
 每次运行最多消耗 2 次)。没配就静默跳过。注:CSE 的排序与真实 google.com 有差异,
 记录里一律标 `source: google_cse`。
 
-> `benchmarks/*.jsonl` 会记下你的检索词与完整 Google 结果。这个仓库的 URL 是公开的,
-> 若不想让购物记录进版本库,把 `benchmarks/` 加进 `.gitignore`。
+> `benchmarks/*.jsonl` 会记下检索词与完整 Google 结果,而仓库 URL 是公开的 ——
+> 所以它**已加进 `.gitignore`**。想让记分板历史进版本库就删掉那一行。
 
 运行前确保当前 shell 有 AWS 凭证
 
@@ -138,9 +143,10 @@ Braun 那次便宜的是新三年的 Pro+(该买),AirPods 那次便宜的反而�
 uv run pytest tests/ -q -o addopts=""
 ```
 
-当前 159 个测试(数据层解析、LLM 重排/JSON、输出格式、agent 循环与 trace、Bedrock 适配、
+当前 165 个测试(数据层解析、LLM 重排/JSON、输出格式、agent 循环与 trace、Bedrock 适配、
 新旧型号对比与选型回归、目录行/购物行区分、Pro 与 Pro+ 世代区分、cc/s 配置区分、
-成色多选过滤、Google 对照基线与配件过滤、同型番可比性),全部离线、零网络、零真实 LLM。
+成色多选过滤、本体行情统计与搭售商品保护、Google 对照基线与配件过滤、同型番可比性),
+全部离线、零网络、零真实 LLM。
 
 ## 说明与边界
 
@@ -150,6 +156,14 @@ uv run pytest tests/ -q -o addopts=""
   成色好的二手完全可以(实测 D850 中古 ¥125,000 vs 新品 ¥279,980);而**电动剃须刀这类个人护理用品只推新品**,
   且默认首选 kakaku 正规渠道 —— Mercari 的「新品・未使用」是个人卖家自述,无法核实是否真未开封。
   入耳式耳机这类介于两者之间的,先提示卫生顾虑再让用户决定。
+- **「最安値」≠「实际支付额」**(prompt R10):kakaku 价格是**现金**最安値,不含
+  メーカーキャッシュバック(实测 Braun 有 ¥3,500 的本体+替刃活动,占 8%)与楽天ポイント还元
+  (最高 50%,kakaku 完全不计入)。工具用 `price_basis` 把这个前提写进数据契约,
+  prompt 要求每次价格对比都必须声明,且不许凭记忆编造具体活动。**不建模キャンペーン** ——
+  会过时、要长期维护,提示用户去查更可靠。
+- **过度过滤比漏过配件危险得多**:加配件过滤时曾把 `D850 …本体 NPSストラップ` ¥125,000
+  当配件剔掉 —— 而它正是 agent 推荐的那台。所以配件名改为**条件排除**(标题含 `本体/ボディ`
+  或配件名后跟 `付/込/同梱` 就不算配件),且每个排除项都留原因与样本。
 - **同系列里还有"配置"这一维**(prompt R9):Braun 型番以 `cc` 结尾=洗浄器付き、以 `s` 结尾=本体のみ,
   工具返回的 `variant` 字段标出这一点。实测 Pro+ `9617s` ¥35,698 与 `9657cc` ¥43,999 差 ¥8,301,
   混着比价会让人以为便宜了八千。另外 Mercari 标题里「洗浄器**対応**」≠「洗浄器**付き**」。
